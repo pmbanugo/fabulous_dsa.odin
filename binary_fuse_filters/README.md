@@ -10,7 +10,7 @@ Binary fuse filters are ideal when you have:
 
 - **Static datasets** — All keys are known at construction time
 - **Large sets** — Best suited for 10,000+ keys (for smaller sets, consider xor filters)
-- **Memory-constrained environments** — Uses only ~12.5% overhead vs 44% for Bloom filters
+- **Memory-constrained environments** — Uses only ~9 bits per key (vs ~12+ bits for Bloom filters at similar accuracy)
 - **Read-heavy workloads** — Immutable after construction, optimized for fast queries
 
 ### Common Use Cases
@@ -24,15 +24,15 @@ Binary fuse filters are ideal when you have:
 | URL blocklists           | Compact storage of millions of URLs            |
 | LSM-tree storage engines | Skip SSTable reads for missing keys            |
 
-### Comparison with Alternatives
+### Comparison with Alternatives (at ~0.4% FPR)
 
-| Feature            | Binary Fuse                    | Bloom Filter              | Cuckoo Filter |
-| ------------------ | ------------------------------ | ------------------------- | ------------- |
-| Space efficiency   | **Best** (~1.125 bits/key/bit) | Poor (~1.44 bits/key/bit) | Good          |
-| Query speed        | **Fast** (3 memory accesses)   | Varies                    | Fast          |
-| Construction speed | **Fast**                       | Fast                      | Moderate      |
-| Supports deletion  | ❌                             | ❌                        | ✅            |
-| Supports insertion | ❌                             | ✅                        | ✅            |
+| Feature            | Binary Fuse                  | Bloom Filter              | Cuckoo Filter |
+| ------------------ | ---------------------------- | ------------------------- | ------------- |
+| Space efficiency   | **Best** (~9 bits/key)       | Poor (~11.5 bits/key)     | Good          |
+| Query speed        | **Fast** (3 memory accesses) | Varies (hashing overhead) | Fast          |
+| Construction speed | **Fast**                     | Fast                      | Moderate      |
+| Supports deletion  | ❌                           | ❌                        | ✅            |
+| Supports insertion | ❌                           | ✅                        | ✅            |
 
 **Choose binary fuse filters when** you need maximum space efficiency and your dataset doesn't change after construction.
 
