@@ -6,6 +6,7 @@ An adventure and experiment on Data Structure and Algorithms, implemented in Odi
 ## Data Structures
 
 - [Binary Fuse Filter](binary_fuse_filters/) - Space-efficient probabilistic set membership
+- [Funnel Hash Table](hash_tables/) - High-performance hash table with optimal worst-case probe complexity ([paper](https://arxiv.org/pdf/2501.02305))
 
 ## Testing
 
@@ -13,6 +14,7 @@ Run all tests:
 
 ```sh
 odin test binary_fuse_filters/
+odin test hash_tables/
 ```
 
 Or run tests for a specific package from within its directory:
