@@ -8,6 +8,12 @@ An adventure and experiment on Data Structure and Algorithms, implemented in Odi
 - [Binary Fuse Filter](binary_fuse_filters/) - Space-efficient probabilistic set membership
 - [Funnel Hash Table](hash_tables/) - High-performance hash table with optimal worst-case probe complexity ([paper](https://arxiv.org/pdf/2501.02305))
 
+## Serialization Formats
+
+- [Cap'n Proto](capnp/) - Insanely fast data interchange format (WIP)
+  - [Design Document](capnp/DESIGN.md) - Architecture and specification
+  - [Implementation Roadmap](capnp/IMPLEMENTATION.md) - Phase-by-phase task tracking
+
 ## Testing
 
 Run all tests:
@@ -15,6 +21,7 @@ Run all tests:
 ```sh
 odin test binary_fuse_filters/
 odin test hash_tables/
+odin test capnp/
 ```
 
 Or run tests for a specific package from within its directory:
