@@ -11,7 +11,7 @@ Cap'n Proto is an "insanely fast" data interchange format where the encoding is 
 - **Zero-copy**: Data format is identical to in-memory representation
 - **Position-independent**: Pointers are relative offsets, not absolute addresses
 - **Little-endian**: All integers use little-endian byte order
-- **Arena allocation**: All objects allocated in contiguous segments
+- **Segment-based allocation**: All objects allocated in contiguous segments
 - **O(1) access**: Random field access without parsing entire message
 
 ### References
@@ -310,8 +310,14 @@ capnp/
 │                              Core Infrastructure                                 │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐ │
 │  │   Message    │  │   Segment    │  │   Pointer    │  │   Pack/Unpack        │ │
-│  │   Framing    │  │    Arena     │  │   Codec      │  │   Compression        │ │
+│  │   Framing    │  │   Manager    │  │   Codec      │  │   Compression        │ │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────────────┘ │
+│                          │                                                       │
+│                          ▼                                                       │
+│                    ┌──────────────┐                                              │
+│                    │  core:mem    │  (Odin's built-in allocators)                │
+│                    │  Allocators  │                                              │
+│                    └──────────────┘                                              │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                               Core Types                                         │
 │  ┌────────┐  ┌────────────────┐  ┌──────────────┐  ┌─────────────────────────┐  │
@@ -337,7 +343,7 @@ capnp/
          ▼                                                  ▲
   ┌─────────────┐                                    ┌─────────────┐
   │   Segment   │                                    │   Segment   │
-  │   Arena     │                                    │    Views    │
+  │   Manager   │                                    │    Views    │
   └──────┬──────┘                                    └──────┬──────┘
          │                                                  │
          ▼                                                  ▲
@@ -416,21 +422,159 @@ Pointer :: struct #raw_union {
 }
 ```
 
-### 8.3 Segment and Arena
+### 8.3 Segment Management
+
+Cap'n Proto uses a segment-based memory model. We leverage Odin's built-in allocators 
+from `core:mem` rather than reimplementing arena allocation.
+
+**Key insight:** Cap'n Proto's "arena" is really a **segment manager** - it tracks 
+multiple segments for serialization and inter-segment pointers, not general-purpose 
+memory allocation.
 
 ```odin
+import "core:mem"
+
+// Segment represents a contiguous block of memory for Cap'n Proto objects
 Segment :: struct {
     id:       u32,
-    data:     []Word,
-    used:     u32,      // words used
-    capacity: u32,      // total capacity
-    arena:    ^Arena,
+    data:     []Word,      // Slice of words (allocated via Odin allocator)
+    used:     u32,         // Words used (Cap'n Proto level tracking)
+    capacity: u32,         // Total capacity in words
 }
 
-Arena :: struct {
-    segments:         [dynamic]Segment,
-    allocator:        mem.Allocator,
-    default_seg_size: u32,
+// Segment_Manager manages multiple segments for a message
+// Uses Odin's allocators for actual memory allocation
+Segment_Manager :: struct {
+    segments:         [dynamic]Segment,   // Remembers its allocator automatically
+    allocator:        mem.Allocator,      // Odin allocator for segment data ([]Word)
+    default_seg_size: u32,                // Default segment size in words
+}
+
+// Note: [dynamic]Segment remembers its allocator, so delete() works correctly.
+// The `allocator` field is for allocating the actual segment data ([]Word).
+```
+
+### 8.3.1 Allocator Strategy
+
+**Default:** Uses `context.allocator` (Odin's implicit context), following Odin idioms.
+
+**Cap'n Proto Recommendation:** Arena allocation is strongly preferred because:
+- Messages are built atomically, then serialized and discarded as a whole
+- No individual object deallocation is needed
+- Arena = fast bump-pointer allocation + single bulk free
+- Better cache locality for traversal
+
+**Odin's Two Context Allocators:**
+- `context.allocator` - Default heap-like allocator for persistent allocations
+- `context.temp_allocator` - Growing arena-like allocator for temporary/scratch data
+
+**Guidance by use case:**
+
+| Use Case | Recommended Allocator | Rationale |
+|----------|----------------------|-----------|
+| Simple/one-off messages | `context.allocator` | Convenient, good enough |
+| High-throughput (loops) | `mem.Arena` | Fast alloc, bulk free per message |
+| Request handlers | `context.temp_allocator` | Built-in scratch space, auto-reset |
+| Very large messages | `core:mem/virtual` | Avoids large contiguous alloc |
+| Embedded/constrained | Fixed buffer + arena | No heap allocation |
+
+**Note on `context.temp_allocator`:** Odin's built-in temp allocator is ideal for 
+short-lived message building where you serialize immediately and discard. It's 
+already arena-based and requires no setup.
+
+**Usage examples:**
+```odin
+import "core:mem"
+
+// DEFAULT (make): Convenient value-based creation
+build_simple_message :: proc() -> Error {
+    mb, err := message_builder_make()  // uses context.allocator by default
+    if err != .None do return err
+    defer message_builder_destroy(&mb)
+    
+    root, err2 := message_builder_init_root(&mb, 2, 1)
+    if err2 != .None do return err2
+    // ... build message ...
+    return .None
+}
+
+// DEFAULT (init): Pointer-based for stack allocation
+build_simple_message_stack :: proc() -> Error {
+    mb: Message_Builder
+    message_builder_init(&mb) or_return  // returns ^Message_Builder, Error
+    defer message_builder_destroy(&mb)
+    // ... build message ...
+    return .None
+}
+
+// REUSE PATTERN: Clear and reuse builder (keeps allocated capacity)
+process_many_messages_reuse :: proc(inputs: []Input) -> Error {
+    mb: Message_Builder
+    message_builder_init(&mb) or_return
+    defer message_builder_destroy(&mb)
+    
+    for input in inputs {
+        root, err := message_builder_init_root(&mb, 2, 1)
+        if err != .None do return err
+        // ... build message ...
+        bytes, err2 := serialize(&mb)
+        if err2 != .None do return err2
+        send(bytes)
+        
+        // Clear for reuse - keeps capacity, avoids reallocation
+        message_builder_clear(&mb)
+    }
+    return .None
+}
+
+// ARENA PATTERN: Arena allocator - fast allocation, bulk free
+process_many_messages_arena :: proc(inputs: []Input) -> Error {
+    // Reusable arena for all messages
+    backing := make([]byte, 64 * mem.Kilobyte)
+    defer delete(backing)
+    
+    arena: mem.Arena
+    mem.arena_init(&arena, backing)
+    
+    for input in inputs {
+        mb: Message_Builder
+        message_builder_init(&mb, allocator = mem.arena_allocator(&arena)) or_return
+        // ... build and serialize message ...
+        
+        // Reset arena for next message (fast bulk free)
+        mem.arena_free_all(&arena)
+    }
+    return .None
+}
+
+// TEMP ALLOCATOR: Use Odin's built-in temp allocator for short-lived messages
+send_response :: proc() -> Error {
+    // context.temp_allocator is already arena-based, no setup needed!
+    mb: Message_Builder
+    message_builder_init(&mb, allocator = context.temp_allocator) or_return
+    // No defer needed - temp allocator is managed by runtime
+    
+    // ... build message ...
+    bytes, err := serialize(&mb)
+    if err != .None do return err
+    send(bytes)
+    
+    // Message data is temporary; will be reclaimed when temp allocator resets
+    return .None
+}
+
+// EXPLICIT TEMP SCOPE: Use runtime.default_temp_allocator_proc for explicit control
+handle_batch :: proc() -> Error {
+    for item in batch {
+        // Mark current temp allocator position
+        runtime.default_temp_allocator_temp_begin()
+        defer runtime.default_temp_allocator_temp_end()
+        
+        mb: Message_Builder
+        message_builder_init(&mb, allocator = context.temp_allocator) or_return
+        // ... process item ...
+    }
+    return .None
 }
 ```
 
@@ -438,7 +582,7 @@ Arena :: struct {
 
 ```odin
 Message :: struct {
-    arena: Arena,
+    segments: Segment_Manager,
 }
 
 Read_Limits :: struct {
@@ -458,10 +602,27 @@ DEFAULT_NESTING_LIMIT   :: 64
 
 ```odin
 // Message building
-message_builder_init :: proc(allocator := context.allocator) -> Message_Builder
-message_builder_destroy :: proc(mb: ^Message_Builder)
-message_builder_init_root :: proc(mb: ^Message_Builder, data_words, ptr_words: u16) -> Struct_Builder
+// Default: uses context.allocator; pass mem.arena_allocator(&arena) for high-throughput
+// Following core:strings/Builder pattern: separate init (pointer-based) and make (value-based)
+
+// Pointer-based init: efficient for stack allocation and reuse patterns
+// Returns pointer for chaining, e.g.: mb, err := message_builder_init(&my_builder)
+message_builder_init :: proc(
+    mb: ^Message_Builder,
+    allocator := context.allocator,
+) -> (res: ^Message_Builder, err: Error)
+
+// Value-based make: convenient for simple cases
+// Returns value directly, e.g.: mb, err := message_builder_make()
+message_builder_make :: proc(
+    allocator := context.allocator,
+) -> (res: Message_Builder, err: Error)
+
+message_builder_destroy :: proc(mb: ^Message_Builder)        // Frees all memory
+message_builder_clear :: proc(mb: ^Message_Builder)          // Resets for reuse (keeps capacity)
+message_builder_init_root :: proc(mb: ^Message_Builder, data_words, ptr_words: u16) -> (Struct_Builder, Error)
 message_builder_get_segments :: proc(mb: ^Message_Builder) -> [][]Word
+message_builder_total_words :: proc(mb: ^Message_Builder) -> u32  // Total words used
 
 // Struct building
 struct_builder_set_bool :: proc(sb: ^Struct_Builder, offset_bits: u32, value: bool)
@@ -520,18 +681,18 @@ list_reader_get_struct :: proc(lr: ^List_Reader, index: u32) -> (Struct_Reader, 
 
 ```odin
 // Serialize message to bytes (with frame header)
-serialize :: proc(mb: ^Message_Builder, allocator := context.allocator) -> []byte
+serialize :: proc(mb: ^Message_Builder, allocator := context.allocator) -> ([]byte, Error)
 serialize_to_writer :: proc(mb: ^Message_Builder, w: io.Writer) -> Error
 
 // Deserialize bytes to message reader
 deserialize :: proc(data: []byte, limits := Read_Limits{}) -> (Message_Reader, Error)
 
 // Packing
-pack :: proc(data: []byte, allocator := context.allocator) -> []byte
+pack :: proc(data: []byte, allocator := context.allocator) -> ([]byte, Error)
 unpack :: proc(data: []byte, allocator := context.allocator) -> ([]byte, Error)
 
 // Convenience: serialize + pack
-serialize_packed :: proc(mb: ^Message_Builder, allocator := context.allocator) -> []byte
+serialize_packed :: proc(mb: ^Message_Builder, allocator := context.allocator) -> ([]byte, Error)
 deserialize_packed :: proc(data: []byte, limits := Read_Limits{}) -> (Message_Reader, Error)
 ```
 
@@ -572,7 +733,10 @@ A list of Void or zero-sized structs can have huge element count:
 | Decision | Rationale |
 |----------|-----------|
 | Use `bit_field` for pointers | Matches spec exactly, Odin native feature |
-| Arena allocation | Cap'n Proto requires contiguous segments |
+| Use Odin's `core:mem` allocators | Leverage proven allocators (arena, virtual, heap) instead of reimplementing |
+| Default to `context.allocator` | Idiomatic Odin; allows third-party interception |
+| Accept allocator parameter | Users can override with arena/temp/custom allocators |
+| Segment_Manager for Cap'n Proto segments | Separates Cap'n Proto segment tracking from memory allocation |
 | Explicit error returns | Odin idiom, no exceptions |
 | Zero-copy reading | Return slices into message buffer |
 | Separate Builder/Reader | Clear mutable vs immutable distinction |
