@@ -19,31 +19,31 @@ This document tracks the implementation progress for Cap'n Proto in Odin. Each p
 
 | Task                              | Status | Notes                            |
 | --------------------------------- | ------ | -------------------------------- |
-| Define `Word` type (u64)          | ⬜     |                                  |
-| Define `Pointer_Kind` enum        | ⬜     | Struct=0, List=1, Far=2, Other=3 |
-| Define `Element_Size` enum        | ⬜     | 0-7 element size codes           |
-| Define `Struct_Pointer` bit_field | ⬜     | 2+30+16+16 bits                  |
-| Define `List_Pointer` bit_field   | ⬜     | 2+30+3+29 bits                   |
-| Define `Far_Pointer` bit_field    | ⬜     | 2+1+29+32 bits                   |
-| Define `Pointer` raw_union        | ⬜     | Union of all pointer types       |
-| Define `Error` enum               | ⬜     | All error codes                  |
+| Define `Word` type (u64)          | ✅     |                                  |
+| Define `Pointer_Kind` enum        | ✅     | Struct=0, List=1, Far=2, Other=3 |
+| Define `Element_Size` enum        | ✅     | 0-7 element size codes           |
+| Define `Struct_Pointer` bit_field | ✅     | 2+30+16+16 bits                  |
+| Define `List_Pointer` bit_field   | ✅     | 2+30+3+29 bits                   |
+| Define `Far_Pointer` bit_field    | ✅     | 2+1+29+32 bits                   |
+| Define `Pointer` raw_union        | ✅     | Union of all pointer types       |
+| Define `Error` enum               | ✅     | All error codes (in errors.odin) |
 
 ### 1.2 Pointer Encoding/Decoding (`pointer.odin`)
 
 | Task                            | Status | Notes                              |
 | ------------------------------- | ------ | ---------------------------------- |
-| `pointer_get_kind`              | ⬜     | Extract kind from raw u64          |
-| `pointer_is_null`               | ⬜     | Check if pointer is null           |
-| `struct_pointer_encode`         | ⬜     | Create struct pointer from parts   |
-| `struct_pointer_decode`         | ⬜     | Extract parts from struct pointer  |
-| `struct_pointer_target`         | ⬜     | Calculate target address           |
-| `list_pointer_encode`           | ⬜     | Create list pointer from parts     |
-| `list_pointer_decode`           | ⬜     | Extract parts from list pointer    |
-| `list_pointer_target`           | ⬜     | Calculate target address           |
-| `far_pointer_encode`            | ⬜     | Create far pointer from parts      |
-| `far_pointer_decode`            | ⬜     | Extract parts from far pointer     |
-| `element_size_bits`             | ⬜     | Get bits per element for size code |
-| Unit tests for pointer encoding | ⬜     | Roundtrip tests                    |
+| `pointer_get_kind`              | ✅     | Extract kind from raw u64          |
+| `pointer_is_null`               | ✅     | Check if pointer is null           |
+| `struct_pointer_encode`         | ✅     | Create struct pointer from parts   |
+| `struct_pointer_decode`         | ✅     | Extract parts from struct pointer  |
+| `struct_pointer_target`         | ✅     | Calculate target address           |
+| `list_pointer_encode`           | ✅     | Create list pointer from parts     |
+| `list_pointer_decode`           | ✅     | Extract parts from list pointer    |
+| `list_pointer_target`           | ✅     | Calculate target address           |
+| `far_pointer_encode`            | ✅     | Create far pointer from parts      |
+| `far_pointer_decode`            | ✅     | Extract parts from far pointer     |
+| `element_size_bits`             | ✅     | Get bits per element for size code |
+| Unit tests for pointer encoding | ✅     | Roundtrip tests                    |
 
 ### 1.3 Segment Management (`segment.odin`)
 
@@ -51,35 +51,35 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 
 | Task                            | Status | Notes                                                  |
 | ------------------------------- | ------ | ------------------------------------------------------ |
-| Define `Segment` struct         | ⬜     | id, data []Word, used, capacity                        |
-| Define `Segment_Manager` struct | ⬜     | segments, allocator (Odin allocator), default_seg_size |
-| `segment_manager_init`          | ⬜     | Initialize with Odin allocator (heap, arena, etc.)     |
-| `segment_manager_destroy`       | ⬜     | Free all segment memory via allocator                  |
-| `segment_manager_allocate`      | ⬜     | Allocate words, create new segment if needed           |
-| `segment_manager_get_segment`   | ⬜     | Get segment by ID                                      |
-| `segment_allocate`              | ⬜     | Allocate words within a segment                        |
-| `segment_get_word`              | ⬜     | Get word at offset                                     |
-| `segment_set_word`              | ⬜     | Set word at offset                                     |
-| `segment_get_bytes`             | ⬜     | Get byte slice at offset                               |
+| Define `Segment` struct         | ✅     | id, data []Word, used, capacity                        |
+| Define `Segment_Manager` struct | ✅     | segments, allocator (Odin allocator), default_seg_size |
+| `segment_manager_init`          | ✅     | Initialize with Odin allocator (heap, arena, etc.)     |
+| `segment_manager_destroy`       | ✅     | Free all segment memory via allocator                  |
+| `segment_manager_allocate`      | ✅     | Allocate words, create new segment if needed           |
+| `segment_manager_get_segment`   | ✅     | Get segment by ID                                      |
+| `segment_allocate`              | ✅     | Allocate words within a segment                        |
+| `segment_get_word`              | ✅     | Get word at offset                                     |
+| `segment_set_word`              | ✅     | Set word at offset                                     |
+| `segment_get_bytes`             | ✅     | Get byte slice at offset                               |
 
 ### 1.4 Message Framing (`message.odin`)
 
 | Task                         | Status | Notes                          |
 | ---------------------------- | ------ | ------------------------------ |
-| Define `Frame_Header` struct | ⬜     | segment_count, segment_sizes   |
-| `frame_header_size`          | ⬜     | Calculate header size in bytes |
-| `serialize_frame_header`     | ⬜     | Write header to byte slice     |
-| `deserialize_frame_header`   | ⬜     | Parse header from byte slice   |
-| `serialize_segments`         | ⬜     | Write all segments to bytes    |
-| `deserialize_segments`       | ⬜     | Parse segments from bytes      |
-| Unit tests for framing       | ⬜     | Roundtrip tests                |
+| Define `Frame_Header` struct | ✅     | segment_count, segment_sizes   |
+| `frame_header_size`          | ✅     | Calculate header size in bytes |
+| `serialize_frame_header`     | ✅     | Write header to byte slice     |
+| `deserialize_frame_header`   | ✅     | Parse header from byte slice   |
+| `serialize_segments`         | ✅     | Write all segments to bytes    |
+| `deserialize_segments`       | ✅     | Parse segments from bytes      |
+| Unit tests for framing       | ✅     | Roundtrip tests                |
 
 ### Phase 1 Deliverables
 
-- [ ] All core types defined and compiling
-- [ ] Pointer encoding/decoding with tests
-- [ ] Segment management using Odin allocators working
-- [ ] Message framing serialize/deserialize
+- [x] All core types defined and compiling
+- [x] Pointer encoding/decoding with tests
+- [x] Segment management using Odin allocators working
+- [x] Message framing serialize/deserialize
 
 ---
 
@@ -372,18 +372,18 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 
 | File                    | Phase | Status |
 | ----------------------- | ----- | ------ |
-| `capnp/capnp.odin`      | 1     | ⬜     |
-| `capnp/types.odin`      | 1     | ⬜     |
-| `capnp/errors.odin`     | 1     | ⬜     |
-| `capnp/pointer.odin`    | 1     | ⬜     |
-| `capnp/segment.odin`    | 1     | ⬜     |
-| `capnp/message.odin`    | 1     | ⬜     |
+| `capnp/capnp.odin`      | 1     | ✅     |
+| `capnp/types.odin`      | 1     | ✅     |
+| `capnp/errors.odin`     | 1     | ✅     |
+| `capnp/pointer.odin`    | 1     | ✅     |
+| `capnp/segment.odin`    | 1     | ✅     |
+| `capnp/message.odin`    | 1     | ✅     |
+| `capnp/tests.odin`      | 1     | ✅     |
 | `capnp/builder.odin`    | 2     | ⬜     |
 | `capnp/reader.odin`     | 3     | ⬜     |
 | `capnp/validation.odin` | 3     | ⬜     |
 | `capnp/serialize.odin`  | 2-3   | ⬜     |
 | `capnp/pack.odin`       | 4     | ⬜     |
-| `capnp/tests/`          | 5     | ⬜     |
 
 ---
 
@@ -391,9 +391,9 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 
 Track implementation sessions here:
 
-| Date | Phase | Work Done | Next Steps |
-| ---- | ----- | --------- | ---------- |
-|      |       |           |            |
+| Date       | Phase | Work Done                                                         | Next Steps           |
+| ---------- | ----- | ----------------------------------------------------------------- | -------------------- |
+| 2026-01-30 | 1     | Core types, pointer encoding, segment management, message framing | Phase 2: Builder API |
 
 ---
 
