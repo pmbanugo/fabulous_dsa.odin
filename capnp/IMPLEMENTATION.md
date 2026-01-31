@@ -91,71 +91,71 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 
 | Task                            | Status | Notes                                                     |
 | ------------------------------- | ------ | --------------------------------------------------------- |
-| Define `Message_Builder` struct | ⬜     | Contains Segment_Manager                                  |
-| `message_builder_init`          | ⬜     | Pointer-based, default: context.allocator                 |
-| `message_builder_make`          | ⬜     | Value-based, default: context.allocator                   |
-| `message_builder_destroy`       | ⬜     | Free all memory (delete)                                  |
-| `message_builder_clear`         | ⬜     | Reset for reuse, keeps capacity (clear)                   |
-| `message_builder_init_root`     | ⬜     | Initialize root struct, returns `(Struct_Builder, Error)` |
-| `message_builder_get_segments`  | ⬜     | Get segment data for serialization                        |
-| `message_builder_total_words`   | ⬜     | Total words used across segments                          |
+| Define `Message_Builder` struct | ✅     | Contains Segment_Manager                                  |
+| `message_builder_init`          | ✅     | Pointer-based, default: context.allocator                 |
+| `message_builder_make`          | ✅     | Value-based, default: context.allocator                   |
+| `message_builder_destroy`       | ✅     | Free all memory (delete)                                  |
+| `message_builder_clear`         | ✅     | Reset for reuse, keeps capacity (clear)                   |
+| `message_builder_init_root`     | ✅     | Initialize root struct, returns `(Struct_Builder, Error)` |
+| `message_builder_get_segments`  | ✅     | Get segment data for serialization                        |
+| `message_builder_total_words`   | ✅     | Total words used across segments                          |
 
 ### 2.2 Struct Builder (`builder.odin`)
 
 | Task                              | Status | Notes                                  |
 | --------------------------------- | ------ | -------------------------------------- |
-| Define `Struct_Builder` struct    | ⬜     | segment, data ptr, pointers ptr, sizes |
-| `struct_builder_set_bool`         | ⬜     | Set bit in data section                |
-| `struct_builder_set_u8`           | ⬜     |                                        |
-| `struct_builder_set_u16`          | ⬜     |                                        |
-| `struct_builder_set_u32`          | ⬜     |                                        |
-| `struct_builder_set_u64`          | ⬜     |                                        |
-| `struct_builder_set_i8`           | ⬜     |                                        |
-| `struct_builder_set_i16`          | ⬜     |                                        |
-| `struct_builder_set_i32`          | ⬜     |                                        |
-| `struct_builder_set_i64`          | ⬜     |                                        |
-| `struct_builder_set_f32`          | ⬜     |                                        |
-| `struct_builder_set_f64`          | ⬜     |                                        |
-| `struct_builder_init_struct`      | ⬜     | Initialize nested struct pointer       |
-| `struct_builder_init_list`        | ⬜     | Initialize list pointer                |
-| `struct_builder_init_struct_list` | ⬜     | Initialize composite list              |
-| `struct_builder_set_text`         | ⬜     | Set text blob                          |
-| `struct_builder_set_data`         | ⬜     | Set data blob                          |
+| Define `Struct_Builder` struct    | ✅     | segment, data ptr, pointers ptr, sizes |
+| `struct_builder_set_bool`         | ✅     | Set bit in data section                |
+| `struct_builder_set_u8`           | ✅     |                                        |
+| `struct_builder_set_u16`          | ✅     |                                        |
+| `struct_builder_set_u32`          | ✅     |                                        |
+| `struct_builder_set_u64`          | ✅     |                                        |
+| `struct_builder_set_i8`           | ✅     |                                        |
+| `struct_builder_set_i16`          | ✅     |                                        |
+| `struct_builder_set_i32`          | ✅     |                                        |
+| `struct_builder_set_i64`          | ✅     |                                        |
+| `struct_builder_set_f32`          | ✅     |                                        |
+| `struct_builder_set_f64`          | ✅     |                                        |
+| `struct_builder_init_struct`      | ✅     | Initialize nested struct pointer       |
+| `struct_builder_init_list`        | ✅     | Initialize list pointer                |
+| `struct_builder_init_struct_list` | ✅     | Initialize composite list              |
+| `struct_builder_set_text`         | ✅     | Set text blob                          |
+| `struct_builder_set_data`         | ✅     | Set data blob                          |
 
 ### 2.3 List Builder (`builder.odin`)
 
 | Task                         | Status | Notes                                         |
 | ---------------------------- | ------ | --------------------------------------------- |
-| Define `List_Builder` struct | ⬜     | segment, ptr, count, step, sizes              |
-| `list_builder_set_bool`      | ⬜     | Bit packing                                   |
-| `list_builder_set_u8`        | ⬜     |                                               |
-| `list_builder_set_u16`       | ⬜     |                                               |
-| `list_builder_set_u32`       | ⬜     |                                               |
-| `list_builder_set_u64`       | ⬜     |                                               |
-| `list_builder_set_i8`        | ⬜     |                                               |
-| `list_builder_set_i16`       | ⬜     |                                               |
-| `list_builder_set_i32`       | ⬜     |                                               |
-| `list_builder_set_i64`       | ⬜     |                                               |
-| `list_builder_set_f32`       | ⬜     |                                               |
-| `list_builder_set_f64`       | ⬜     |                                               |
-| `list_builder_set_pointer`   | ⬜     | For pointer lists                             |
-| `list_builder_get_struct`    | ⬜     | Get struct builder for composite list element |
+| Define `List_Builder` struct | ✅     | segment, ptr, count, step, sizes              |
+| `list_builder_set_bool`      | ✅     | Bit packing                                   |
+| `list_builder_set_u8`        | ✅     |                                               |
+| `list_builder_set_u16`       | ✅     |                                               |
+| `list_builder_set_u32`       | ✅     |                                               |
+| `list_builder_set_u64`       | ✅     |                                               |
+| `list_builder_set_i8`        | ✅     |                                               |
+| `list_builder_set_i16`       | ✅     |                                               |
+| `list_builder_set_i32`       | ✅     |                                               |
+| `list_builder_set_i64`       | ✅     |                                               |
+| `list_builder_set_f32`       | ✅     |                                               |
+| `list_builder_set_f64`       | ✅     |                                               |
+| `list_builder_set_pointer`   | ✅     | For pointer lists                             |
+| `list_builder_get_struct`    | ✅     | Get struct builder for composite list element |
 
 ### 2.4 Serialization (`serialize.odin`)
 
 | Task                  | Status | Notes                |
 | --------------------- | ------ | -------------------- |
-| `serialize`           | ⬜     | Message to bytes     |
-| `serialize_to_writer` | ⬜     | Message to io.Writer |
+| `serialize`           | ✅     | Message to bytes     |
+| `serialize_to_writer` | ✅     | Message to io.Writer |
 
 ### Phase 2 Deliverables
 
-- [ ] Can build simple structs with primitives
-- [ ] Can build nested structs
-- [ ] Can build primitive lists
-- [ ] Can build struct lists (composite)
-- [ ] Can set text and data blobs
-- [ ] Serialization to bytes working
+- [x] Can build simple structs with primitives
+- [x] Can build nested structs
+- [x] Can build primitive lists
+- [x] Can build struct lists (composite)
+- [x] Can set text and data blobs
+- [x] Serialization to bytes working
 
 ---
 
@@ -379,10 +379,10 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 | `capnp/segment.odin`    | 1     | ✅     |
 | `capnp/message.odin`    | 1     | ✅     |
 | `capnp/tests.odin`      | 1     | ✅     |
-| `capnp/builder.odin`    | 2     | ⬜     |
+| `capnp/builder.odin`    | 2     | ✅     |
 | `capnp/reader.odin`     | 3     | ⬜     |
 | `capnp/validation.odin` | 3     | ⬜     |
-| `capnp/serialize.odin`  | 2-3   | ⬜     |
+| `capnp/serialize.odin`  | 2-3   | 🟡     |
 | `capnp/pack.odin`       | 4     | ⬜     |
 
 ---
@@ -394,6 +394,7 @@ Track implementation sessions here:
 | Date       | Phase | Work Done                                                         | Next Steps           |
 | ---------- | ----- | ----------------------------------------------------------------- | -------------------- |
 | 2026-01-30 | 1     | Core types, pointer encoding, segment management, message framing | Phase 2: Builder API |
+| 2026-01-31 | 2     | Message/Struct/List Builders, serialization, 17 new tests         | Phase 3: Reader API  |
 
 ---
 

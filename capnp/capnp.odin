@@ -14,10 +14,10 @@
 
 package capnp
 
-// Re-export constants
-WORD_SIZE :: WORD_SIZE_BYTES
-BITS_PER :: BITS_PER_WORD
-DEFAULT_SEG_SIZE :: DEFAULT_SEGMENT_SIZE
+// Re-export constants. Is it necessary in Odin, if they're already public in a module?
+// WORD_SIZE :: WORD_SIZE_BYTES
+// BITS_PER :: BITS_PER_WORD
+// DEFAULT_SEG_SIZE :: DEFAULT_SEGMENT_SIZE
 
 // Re-export security limit defaults
 DEFAULT_TRAVERSAL_LIMIT :: 8 * 1024 * 1024  // 64 MB worth of words
