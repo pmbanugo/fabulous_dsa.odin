@@ -167,81 +167,83 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 
 | Task                           | Status | Notes                          |
 | ------------------------------ | ------ | ------------------------------ |
-| Define `Message_Reader` struct | ⬜     | segments, limits               |
-| Define `Read_Limits` struct    | ⬜     | traversal_limit, nesting_limit |
-| `message_reader_from_bytes`    | ⬜     | Deserialize with validation    |
-| `message_reader_from_segments` | ⬜     | Direct segment access          |
-| `message_reader_get_root`      | ⬜     | Get root struct reader         |
+| Define `Message_Reader` struct | ✅     | segments, limits               |
+| Define `Read_Limits` struct    | ✅     | traversal_limit, nesting_limit |
+| `message_reader_from_bytes`    | ✅     | Deserialize with validation    |
+| `message_reader_from_segments` | ✅     | Direct segment access          |
+| `message_reader_get_root`      | ✅     | Get root struct reader         |
 
 ### 3.2 Struct Reader (`reader.odin`)
 
 | Task                          | Status | Notes                                   |
 | ----------------------------- | ------ | --------------------------------------- |
-| Define `Struct_Reader` struct | ⬜     | segment, data, pointers, sizes, nesting |
-| `struct_reader_get_bool`      | ⬜     | With default                            |
-| `struct_reader_get_u8`        | ⬜     |                                         |
-| `struct_reader_get_u16`       | ⬜     |                                         |
-| `struct_reader_get_u32`       | ⬜     |                                         |
-| `struct_reader_get_u64`       | ⬜     |                                         |
-| `struct_reader_get_i8`        | ⬜     |                                         |
-| `struct_reader_get_i16`       | ⬜     |                                         |
-| `struct_reader_get_i32`       | ⬜     |                                         |
-| `struct_reader_get_i64`       | ⬜     |                                         |
-| `struct_reader_get_f32`       | ⬜     |                                         |
-| `struct_reader_get_f64`       | ⬜     |                                         |
-| `struct_reader_get_struct`    | ⬜     | With pointer validation                 |
-| `struct_reader_get_list`      | ⬜     | With pointer validation                 |
-| `struct_reader_get_text`      | ⬜     | Returns string                          |
-| `struct_reader_get_data`      | ⬜     | Returns []byte                          |
-| `struct_reader_has_pointer`   | ⬜     | Check if pointer is non-null            |
+| Define `Struct_Reader` struct | ✅     | segment, data, pointers, sizes, nesting |
+| `struct_reader_get_bool`      | ✅     | With default                            |
+| `struct_reader_get_u8`        | ✅     |                                         |
+| `struct_reader_get_u16`       | ✅     |                                         |
+| `struct_reader_get_u32`       | ✅     |                                         |
+| `struct_reader_get_u64`       | ✅     |                                         |
+| `struct_reader_get_i8`        | ✅     |                                         |
+| `struct_reader_get_i16`       | ✅     |                                         |
+| `struct_reader_get_i32`       | ✅     |                                         |
+| `struct_reader_get_i64`       | ✅     |                                         |
+| `struct_reader_get_f32`       | ✅     |                                         |
+| `struct_reader_get_f64`       | ✅     |                                         |
+| `struct_reader_get_struct`    | ✅     | With pointer validation                 |
+| `struct_reader_get_list`      | ✅     | With pointer validation                 |
+| `struct_reader_get_text`      | ✅     | Returns string                          |
+| `struct_reader_get_data`      | ✅     | Returns []byte                          |
+| `struct_reader_has_pointer`   | ✅     | Check if pointer is non-null            |
 
 ### 3.3 List Reader (`reader.odin`)
 
 | Task                        | Status | Notes               |
 | --------------------------- | ------ | ------------------- |
-| Define `List_Reader` struct | ⬜     |                     |
-| `list_reader_len`           | ⬜     | Element count       |
-| `list_reader_get_bool`      | ⬜     |                     |
-| `list_reader_get_u8`        | ⬜     |                     |
-| `list_reader_get_u16`       | ⬜     |                     |
-| `list_reader_get_u32`       | ⬜     |                     |
-| `list_reader_get_u64`       | ⬜     |                     |
-| `list_reader_get_i8`        | ⬜     |                     |
-| `list_reader_get_i16`       | ⬜     |                     |
-| `list_reader_get_i32`       | ⬜     |                     |
-| `list_reader_get_i64`       | ⬜     |                     |
-| `list_reader_get_f32`       | ⬜     |                     |
-| `list_reader_get_f64`       | ⬜     |                     |
-| `list_reader_get_struct`    | ⬜     | For composite lists |
-| `list_reader_get_text`      | ⬜     | For List(Text)      |
-| `list_reader_get_data`      | ⬜     | For List(Data)      |
+| Define `List_Reader` struct | ✅     |                     |
+| `list_reader_len`           | ✅     | Element count       |
+| `list_reader_get_bool`      | ✅     |                     |
+| `list_reader_get_u8`        | ✅     |                     |
+| `list_reader_get_u16`       | ✅     |                     |
+| `list_reader_get_u32`       | ✅     |                     |
+| `list_reader_get_u64`       | ✅     |                     |
+| `list_reader_get_i8`        | ✅     |                     |
+| `list_reader_get_i16`       | ✅     |                     |
+| `list_reader_get_i32`       | ✅     |                     |
+| `list_reader_get_i64`       | ✅     |                     |
+| `list_reader_get_f32`       | ✅     |                     |
+| `list_reader_get_f64`       | ✅     |                     |
+| `list_reader_get_struct`    | ✅     | For composite lists |
+| `list_reader_get_text`      | ✅     | For List(Text)      |
+| `list_reader_get_data`      | ✅     | For List(Data)      |
 
 ### 3.4 Pointer Validation (`validation.odin`)
 
-| Task                      | Status | Notes                  |
-| ------------------------- | ------ | ---------------------- |
-| `validate_struct_pointer` | ⬜     | Bounds check           |
-| `validate_list_pointer`   | ⬜     | Bounds check           |
-| `follow_far_pointer`      | ⬜     | Resolve far pointers   |
-| `check_traversal_limit`   | ⬜     | Update and check limit |
-| `check_nesting_limit`     | ⬜     | Check depth            |
+| Task                      | Status | Notes                        |
+| ------------------------- | ------ | ---------------------------- |
+| `validate_struct_pointer` | ✅     | Bounds check                 |
+| `validate_list_pointer`   | ✅     | Bounds check                 |
+| `follow_far_pointer`      | ✅     | Resolve far pointers         |
+| `check_traversal_limit`   | ✅     | Update and check limit       |
+| `check_nesting_limit`     | ✅     | Check depth                  |
+| `bounds_check`            | ✅     | Verify offset+size in bounds |
+| `validate_text`           | ✅     | NUL-termination check        |
 
 ### 3.5 Deserialization (`serialize.odin`)
 
 | Task                      | Status | Notes                       |
 | ------------------------- | ------ | --------------------------- |
-| `deserialize`             | ⬜     | Bytes to Message_Reader     |
-| `deserialize_from_reader` | ⬜     | io.Reader to Message_Reader |
+| `deserialize`             | ✅     | Bytes to Message_Reader     |
+| `deserialize_from_reader` | ✅     | io.Reader to Message_Reader |
 
 ### Phase 3 Deliverables
 
-- [ ] Can read all primitive types
-- [ ] Can traverse nested structs
-- [ ] Can read all list types
-- [ ] Can read text and data
-- [ ] Pointer validation working
-- [ ] Security limits enforced
-- [ ] Far pointer resolution working
+- [x] Can read all primitive types
+- [x] Can traverse nested structs
+- [x] Can read all list types
+- [x] Can read text and data
+- [x] Pointer validation working
+- [x] Security limits enforced
+- [x] Far pointer resolution working
 
 ---
 
@@ -378,11 +380,11 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 | `capnp/pointer.odin`    | 1     | ✅     |
 | `capnp/segment.odin`    | 1     | ✅     |
 | `capnp/message.odin`    | 1     | ✅     |
-| `capnp/tests.odin`      | 1     | ✅     |
+| `capnp/tests.odin`      | 1-3   | ✅     |
 | `capnp/builder.odin`    | 2     | ✅     |
-| `capnp/reader.odin`     | 3     | ⬜     |
-| `capnp/validation.odin` | 3     | ⬜     |
-| `capnp/serialize.odin`  | 2-3   | 🟡     |
+| `capnp/reader.odin`     | 3     | ✅     |
+| `capnp/validation.odin` | 3     | ✅     |
+| `capnp/serialize.odin`  | 2-3   | ✅     |
 | `capnp/pack.odin`       | 4     | ⬜     |
 
 ---
@@ -395,6 +397,7 @@ Track implementation sessions here:
 | ---------- | ----- | ----------------------------------------------------------------- | -------------------- |
 | 2026-01-30 | 1     | Core types, pointer encoding, segment management, message framing | Phase 2: Builder API |
 | 2026-01-31 | 2     | Message/Struct/List Builders, serialization, 17 new tests         | Phase 3: Reader API  |
+| 2026-01-31 | 3     | Reader API, validation, deserialization, 13 new reader tests      | Phase 4: Packing     |
 
 ---
 

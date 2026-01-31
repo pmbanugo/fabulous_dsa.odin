@@ -968,3 +968,389 @@ test_zero_count_struct_list :: proc(t: ^testing.T) {
 	testing.expect_value(t, list.count, u32(0))
 	testing.expect_value(t, list.element_size, Element_Size.Composite)
 }
+
+// ============================================================================
+// Reader API Tests
+// ============================================================================
+
+@(test)
+test_reader_primitives_roundtrip :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	root, _ := message_builder_init_root(&mb, 3, 0)
+	struct_builder_set_u64(&root, 0, 0x1234567890ABCDEF)
+	struct_builder_set_u32(&root, 8, 12345)
+	struct_builder_set_u16(&root, 12, 6789)
+	struct_builder_set_u8(&root, 14, 42)
+	struct_builder_set_bool(&root, 120, true) // bit 120 = byte 15, bit 0
+	
+	// Serialize
+	data, err := serialize(&mb)
+	defer delete(data)
+	testing.expect_value(t, err, Error.None)
+	
+	// Deserialize
+	reader, reader_err := deserialize(data)
+	defer message_reader_destroy(&reader)
+	testing.expect_value(t, reader_err, Error.None)
+	
+	// Read root
+	sr, root_err := message_reader_get_root(&reader)
+	testing.expect_value(t, root_err, Error.None)
+	
+	// Verify primitives
+	testing.expect_value(t, struct_reader_get_u64(&sr, 0), u64(0x1234567890ABCDEF))
+	testing.expect_value(t, struct_reader_get_u32(&sr, 8), u32(12345))
+	testing.expect_value(t, struct_reader_get_u16(&sr, 12), u16(6789))
+	testing.expect_value(t, struct_reader_get_u8(&sr, 14), u8(42))
+	testing.expect(t, struct_reader_get_bool(&sr, 120), "Bool at bit 120 should be true")
+}
+
+@(test)
+test_reader_signed_integers :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	root, _ := message_builder_init_root(&mb, 2, 0)
+	struct_builder_set_i64(&root, 0, -1234567890)
+	struct_builder_set_i32(&root, 8, -12345)
+	struct_builder_set_i16(&root, 12, -678)
+	struct_builder_set_i8(&root, 14, -42)
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	
+	testing.expect_value(t, struct_reader_get_i64(&sr, 0), i64(-1234567890))
+	testing.expect_value(t, struct_reader_get_i32(&sr, 8), i32(-12345))
+	testing.expect_value(t, struct_reader_get_i16(&sr, 12), i16(-678))
+	testing.expect_value(t, struct_reader_get_i8(&sr, 14), i8(-42))
+}
+
+@(test)
+test_reader_floats :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	root, _ := message_builder_init_root(&mb, 2, 0)
+	struct_builder_set_f32(&root, 0, 3.14159)
+	struct_builder_set_f64(&root, 8, 2.718281828)
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	
+	f32_val := struct_reader_get_f32(&sr, 0)
+	f64_val := struct_reader_get_f64(&sr, 8)
+	
+	testing.expect(t, abs(f32_val - 3.14159) < 0.0001, "f32 should be close to 3.14159")
+	testing.expect(t, abs(f64_val - 2.718281828) < 0.0000001, "f64 should be close to 2.718281828")
+}
+
+@(test)
+test_reader_defaults_for_out_of_bounds :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	// Create a struct with only 1 data word
+	root, _ := message_builder_init_root(&mb, 1, 0)
+	struct_builder_set_u64(&root, 0, 42)
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	
+	// Read beyond struct size - should return defaults
+	testing.expect_value(t, struct_reader_get_u64(&sr, 8, 999), u64(999))
+	testing.expect_value(t, struct_reader_get_u32(&sr, 8, 999), u32(999))
+	testing.expect_value(t, struct_reader_get_u16(&sr, 8, 999), u16(999))
+	testing.expect_value(t, struct_reader_get_u8(&sr, 8, 99), u8(99))
+	testing.expect_value(t, struct_reader_get_bool(&sr, 64, true), true)
+}
+
+@(test)
+test_reader_text :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	root, _ := message_builder_init_root(&mb, 0, 1)
+	struct_builder_set_text(&root, 0, "Hello, Cap'n Proto!")
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	
+	text, text_err := struct_reader_get_text(&sr, 0)
+	testing.expect_value(t, text_err, Error.None)
+	testing.expect_value(t, text, "Hello, Cap'n Proto!")
+}
+
+@(test)
+test_reader_data :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	root, _ := message_builder_init_root(&mb, 0, 1)
+	test_data := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
+	struct_builder_set_data(&root, 0, test_data)
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	
+	read_data, data_err := struct_reader_get_data(&sr, 0)
+	testing.expect_value(t, data_err, Error.None)
+	testing.expect_value(t, len(read_data), 5)
+	for i in 0..<5 {
+		testing.expect_value(t, read_data[i], test_data[i])
+	}
+}
+
+@(test)
+test_reader_nested_struct :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	root, _ := message_builder_init_root(&mb, 1, 1)
+	struct_builder_set_u64(&root, 0, 100)
+	
+	nested, _ := struct_builder_init_struct(&root, 0, 1, 0)
+	struct_builder_set_u64(&nested, 0, 200)
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	
+	testing.expect_value(t, struct_reader_get_u64(&sr, 0), u64(100))
+	testing.expect(t, struct_reader_has_pointer(&sr, 0), "Should have pointer at index 0")
+	
+	nested_sr, nested_err := struct_reader_get_struct(&sr, 0)
+	testing.expect_value(t, nested_err, Error.None)
+	testing.expect_value(t, struct_reader_get_u64(&nested_sr, 0), u64(200))
+}
+
+@(test)
+test_reader_list_u32 :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	root, _ := message_builder_init_root(&mb, 0, 1)
+	list, _ := struct_builder_init_list(&root, 0, .Four_Bytes, 5)
+	
+	for i in 0..<5 {
+		list_builder_set_u32(&list, u32(i), u32(i * 100))
+	}
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	lr, list_err := struct_reader_get_list(&sr, 0, .Four_Bytes)
+	testing.expect_value(t, list_err, Error.None)
+	testing.expect_value(t, list_reader_len(&lr), u32(5))
+	
+	for i in 0..<5 {
+		testing.expect_value(t, list_reader_get_u32(&lr, u32(i)), u32(i * 100))
+	}
+}
+
+@(test)
+test_reader_list_bool :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	root, _ := message_builder_init_root(&mb, 0, 1)
+	list, _ := struct_builder_init_list(&root, 0, .Bit, 8)
+	
+	list_builder_set_bool(&list, 0, true)
+	list_builder_set_bool(&list, 2, true)
+	list_builder_set_bool(&list, 7, true)
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	lr, _ := struct_reader_get_list(&sr, 0, .Bit)
+	
+	testing.expect_value(t, list_reader_len(&lr), u32(8))
+	testing.expect(t, list_reader_get_bool(&lr, 0), "Bit 0 should be true")
+	testing.expect(t, !list_reader_get_bool(&lr, 1), "Bit 1 should be false")
+	testing.expect(t, list_reader_get_bool(&lr, 2), "Bit 2 should be true")
+	testing.expect(t, !list_reader_get_bool(&lr, 3), "Bit 3 should be false")
+	testing.expect(t, list_reader_get_bool(&lr, 7), "Bit 7 should be true")
+}
+
+@(test)
+test_reader_composite_list :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	root, _ := message_builder_init_root(&mb, 0, 1)
+	list, _ := struct_builder_init_struct_list(&root, 0, 3, 1, 0)
+	
+	for i in 0..<3 {
+		elem, _ := list_builder_get_struct(&list, u32(i))
+		struct_builder_set_u64(&elem, 0, u64(i * 1000))
+	}
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	lr, list_err := struct_reader_get_list(&sr, 0, .Composite)
+	testing.expect_value(t, list_err, Error.None)
+	testing.expect_value(t, list_reader_len(&lr), u32(3))
+	
+	for i in 0..<3 {
+		elem, elem_err := list_reader_get_struct(&lr, u32(i))
+		testing.expect_value(t, elem_err, Error.None)
+		testing.expect_value(t, struct_reader_get_u64(&elem, 0), u64(i * 1000))
+	}
+}
+
+@(test)
+test_reader_nesting_limit :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	// Create deeply nested structure
+	root, _ := message_builder_init_root(&mb, 1, 1)
+	struct_builder_set_u64(&root, 0, 0)
+	
+	current := root
+	for i in 0..<10 {
+		nested, _ := struct_builder_init_struct(&current, 0, 1, 1)
+		struct_builder_set_u64(&nested, 0, u64(i + 1))
+		current = nested
+	}
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	// Read with a low nesting limit
+	reader, _ := message_reader_from_bytes(data, Read_Limits{
+		traversal_limit = DEFAULT_TRAVERSAL_LIMIT,
+		nesting_limit   = 5,
+	})
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	
+	// Traverse nested structs until limit
+	current_sr := sr
+	for i in 0..<10 {
+		nested_sr, err := struct_reader_get_struct(&current_sr, 0)
+		if err == .Nesting_Limit_Exceeded {
+			// Expected to hit this before reaching depth 10
+			testing.expect(t, i < 10, "Should hit nesting limit before depth 10")
+			return
+		}
+		current_sr = nested_sr
+	}
+	testing.expect(t, false, "Should have hit nesting limit")
+}
+
+@(test)
+test_reader_null_pointer :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	// Create struct with pointer slot but don't set it
+	root, _ := message_builder_init_root(&mb, 0, 1)
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	reader, _ := deserialize(data)
+	defer message_reader_destroy(&reader)
+	
+	sr, _ := message_reader_get_root(&reader)
+	
+	// Pointer should be null
+	testing.expect(t, !struct_reader_has_pointer(&sr, 0), "Pointer 0 should be null")
+	
+	// Getting struct should return empty struct, not error
+	nested, err := struct_reader_get_struct(&sr, 0)
+	testing.expect_value(t, err, Error.None)
+	testing.expect_value(t, nested.data_size, u16(0))
+	testing.expect_value(t, nested.pointer_count, u16(0))
+}
+
+@(test)
+test_reader_traversal_limit :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	// Create a large list
+	root, _ := message_builder_init_root(&mb, 0, 1)
+	list, _ := struct_builder_init_list(&root, 0, .Eight_Bytes, 100)
+	
+	for i in 0..<100 {
+		list_builder_set_u64(&list, u32(i), u64(i))
+	}
+	
+	data, _ := serialize(&mb)
+	defer delete(data)
+	
+	// Read with a very low traversal limit
+	reader, _ := message_reader_from_bytes(data, Read_Limits{
+		traversal_limit = 10, // Only 10 words
+		nesting_limit   = DEFAULT_NESTING_LIMIT,
+	})
+	defer message_reader_destroy(&reader)
+	
+	// Getting root should succeed
+	sr, root_err := message_reader_get_root(&reader)
+	testing.expect_value(t, root_err, Error.None)
+	
+	// Getting the list should exceed traversal limit (100 words > 10)
+	_, list_err := struct_reader_get_list(&sr, 0, .Eight_Bytes)
+	testing.expect_value(t, list_err, Error.Traversal_Limit_Exceeded)
+}
