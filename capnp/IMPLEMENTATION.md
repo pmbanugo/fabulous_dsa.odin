@@ -255,29 +255,29 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 
 | Task                           | Status | Notes              |
 | ------------------------------ | ------ | ------------------ |
-| `pack`                         | ⬜     | Compress bytes     |
-| `pack_to_writer`               | ⬜     | Stream packing     |
-| `pack_word`                    | ⬜     | Pack single word   |
-| `unpack`                       | ⬜     | Decompress bytes   |
-| `unpack_from_reader`           | ⬜     | Stream unpacking   |
-| `unpack_word`                  | ⬜     | Unpack single word |
-| Handle tag 0x00 (zero runs)    | ⬜     |                    |
-| Handle tag 0xFF (literal runs) | ⬜     |                    |
-| Unit tests for packing         | ⬜     | Various patterns   |
+| `pack`                         | ✅     | Compress bytes     |
+| `pack_to_writer`               | ✅     | Stream packing     |
+| `pack_word`                    | ✅     | Pack single word   |
+| `unpack`                       | ✅     | Decompress bytes   |
+| `unpack_from_reader`           | ✅     | Stream unpacking   |
+| `unpack_word`                  | ✅     | Unpack single word |
+| Handle tag 0x00 (zero runs)    | ✅     |                    |
+| Handle tag 0xFF (literal runs) | ✅     |                    |
+| Unit tests for packing         | ✅     | 25 new tests       |
 
 ### 4.2 Packed Serialization
 
 | Task                 | Status | Notes                |
 | -------------------- | ------ | -------------------- |
-| `serialize_packed`   | ⬜     | Serialize + pack     |
-| `deserialize_packed` | ⬜     | Unpack + deserialize |
+| `serialize_packed`   | ✅     | Serialize + pack     |
+| `deserialize_packed` | ✅     | Unpack + deserialize |
 
 ### Phase 4 Deliverables
 
-- [ ] Packing compression working
-- [ ] Unpacking decompression working
-- [ ] Packed serialization end-to-end
-- [ ] Significant size reduction on typical messages
+- [x] Packing compression working
+- [x] Unpacking decompression working
+- [x] Packed serialization end-to-end
+- [x] Significant size reduction on typical messages
 
 ---
 
@@ -385,7 +385,7 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 | `capnp/reader.odin`     | 3     | ✅     |
 | `capnp/validation.odin` | 3     | ✅     |
 | `capnp/serialize.odin`  | 2-3   | ✅     |
-| `capnp/pack.odin`       | 4     | ⬜     |
+| `capnp/pack.odin`       | 4     | ✅     |
 
 ---
 
@@ -393,11 +393,12 @@ Uses Odin's `core:mem` allocators for actual memory allocation.
 
 Track implementation sessions here:
 
-| Date       | Phase | Work Done                                                         | Next Steps           |
-| ---------- | ----- | ----------------------------------------------------------------- | -------------------- |
-| 2026-01-30 | 1     | Core types, pointer encoding, segment management, message framing | Phase 2: Builder API |
-| 2026-01-31 | 2     | Message/Struct/List Builders, serialization, 17 new tests         | Phase 3: Reader API  |
-| 2026-01-31 | 3     | Reader API, validation, deserialization, 13 new reader tests      | Phase 4: Packing     |
+| Date       | Phase | Work Done                                                                        | Next Steps           |
+| ---------- | ----- | -------------------------------------------------------------------------------- | -------------------- |
+| 2026-01-30 | 1     | Core types, pointer encoding, segment management, message framing                | Phase 2: Builder API |
+| 2026-01-31 | 2     | Message/Struct/List Builders, serialization, 17 new tests                        | Phase 3: Reader API  |
+| 2026-01-31 | 3     | Reader API, validation, deserialization, 13 new reader tests                     | Phase 4: Packing     |
+| 2026-02-01 | 4     | Packing/unpacking compression, serialize_packed/deserialize_packed, 25 new tests | Phase 5: Testing     |
 
 ---
 

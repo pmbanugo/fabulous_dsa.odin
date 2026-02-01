@@ -267,8 +267,8 @@ For each 8-byte word:
 
 ```
 Input:  08 00 00 00 03 00 02 00   (struct pointer)
-Tag:    0x15 (bits 0, 2, 4 set)
-Output: 15 08 03 02
+Tag:    0x51 (bits 0, 4, 6 set for non-zero bytes at positions 0, 4, 6)
+Output: 51 08 03 02
 ```
 
 ---

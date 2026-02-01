@@ -1354,3 +1354,502 @@ test_reader_traversal_limit :: proc(t: ^testing.T) {
 	_, list_err := struct_reader_get_list(&sr, 0, .Eight_Bytes)
 	testing.expect_value(t, list_err, Error.Traversal_Limit_Exceeded)
 }
+
+// ============================================================================
+// Packing Tests
+// ============================================================================
+
+@(test)
+test_pack_word_basic :: proc(t: ^testing.T) {
+	// Test packing a word with mixed zeros and non-zeros
+	// Input: 08 00 00 00 03 00 02 00
+	// Byte 0=0x08 (non-zero), Byte 4=0x03 (non-zero), Byte 6=0x02 (non-zero)
+	// Expected tag: 0x51 (bits 0, 4, 6 set = 0b01010001)
+	// Expected output: 51 08 03 02
+	word := [8]byte{0x08, 0x00, 0x00, 0x00, 0x03, 0x00, 0x02, 0x00}
+	result, length := pack_word(word[:])
+	
+	testing.expect_value(t, length, 4)
+	testing.expect_value(t, result[0], u8(0x51)) // tag: bits 0, 4, 6
+	testing.expect_value(t, result[1], u8(0x08))
+	testing.expect_value(t, result[2], u8(0x03))
+	testing.expect_value(t, result[3], u8(0x02))
+}
+
+@(test)
+test_pack_word_all_zeros :: proc(t: ^testing.T) {
+	word := [8]byte{0, 0, 0, 0, 0, 0, 0, 0}
+	result, length := pack_word(word[:])
+	
+	testing.expect_value(t, length, 1)
+	testing.expect_value(t, result[0], u8(0x00)) // tag
+}
+
+@(test)
+test_pack_word_all_nonzero :: proc(t: ^testing.T) {
+	word := [8]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	result, length := pack_word(word[:])
+	
+	testing.expect_value(t, length, 9)
+	testing.expect_value(t, result[0], u8(0xFF)) // tag
+	for i in 0 ..< 8 {
+		testing.expect_value(t, result[i + 1], u8(i + 1))
+	}
+}
+
+@(test)
+test_unpack_word_basic :: proc(t: ^testing.T) {
+	// Packed: 51 08 03 02 -> 08 00 00 00 03 00 02 00
+	// Tag 0x51 = bits 0, 4, 6 set
+	packed := [4]byte{0x51, 0x08, 0x03, 0x02}
+	word, consumed, err := unpack_word(packed[:])
+	
+	testing.expect_value(t, err, Error.None)
+	testing.expect_value(t, consumed, 4)
+	testing.expect_value(t, word[0], u8(0x08)) // bit 0
+	testing.expect_value(t, word[1], u8(0x00))
+	testing.expect_value(t, word[2], u8(0x00))
+	testing.expect_value(t, word[3], u8(0x00))
+	testing.expect_value(t, word[4], u8(0x03)) // bit 4
+	testing.expect_value(t, word[5], u8(0x00))
+	testing.expect_value(t, word[6], u8(0x02)) // bit 6
+	testing.expect_value(t, word[7], u8(0x00))
+}
+
+@(test)
+test_pack_unpack_roundtrip :: proc(t: ^testing.T) {
+	// Create test data with mixed patterns
+	original := [?]byte{
+		0x08, 0x00, 0x00, 0x00, 0x03, 0x00, 0x02, 0x00, // Mixed word
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Zero word
+		0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x99, 0x88, // All non-zero
+	}
+	
+	packed, pack_err := pack(original[:])
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+	
+	unpacked, unpack_err := unpack(packed)
+	defer delete(unpacked)
+	testing.expect_value(t, unpack_err, Error.None)
+	
+	testing.expect_value(t, len(unpacked), len(original))
+	for i in 0 ..< len(original) {
+		testing.expect_value(t, unpacked[i], original[i])
+	}
+}
+
+@(test)
+test_pack_zero_runs :: proc(t: ^testing.T) {
+	// Three zero words -> should pack efficiently
+	original := [24]byte{} // All zeros (3 words)
+	
+	packed, pack_err := pack(original[:])
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+	
+	// Expected: 00 02 (tag 0x00, count 2 for additional words)
+	testing.expect_value(t, len(packed), 2)
+	testing.expect_value(t, packed[0], u8(0x00))
+	testing.expect_value(t, packed[1], u8(0x02)) // 2 additional zero words
+	
+	// Roundtrip
+	unpacked, unpack_err := unpack(packed)
+	defer delete(unpacked)
+	testing.expect_value(t, unpack_err, Error.None)
+	testing.expect_value(t, len(unpacked), len(original))
+}
+
+@(test)
+test_pack_literal_runs :: proc(t: ^testing.T) {
+	// Two words with all non-zero bytes
+	original := [16]byte{
+		0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x99, 0x88,
+		0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+	}
+	
+	packed, pack_err := pack(original[:])
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+	
+	// Expected: FF [8 bytes] 01 [8 bytes]
+	// = 1 + 8 + 1 + 8 = 18 bytes
+	testing.expect_value(t, len(packed), 18)
+	testing.expect_value(t, packed[0], u8(0xFF)) // tag for first word
+	testing.expect_value(t, packed[9], u8(0x01)) // count of 1 additional literal word
+	
+	// Roundtrip
+	unpacked, unpack_err := unpack(packed)
+	defer delete(unpacked)
+	testing.expect_value(t, unpack_err, Error.None)
+	testing.expect_value(t, len(unpacked), len(original))
+	for i in 0 ..< len(original) {
+		testing.expect_value(t, unpacked[i], original[i])
+	}
+}
+
+@(test)
+test_pack_empty_input :: proc(t: ^testing.T) {
+	packed, pack_err := pack(nil)
+	testing.expect_value(t, pack_err, Error.None)
+	testing.expect(t, packed == nil, "Empty input should return nil")
+	
+	unpacked, unpack_err := unpack(nil)
+	testing.expect_value(t, unpack_err, Error.None)
+	testing.expect(t, unpacked == nil, "Empty input should return nil")
+}
+
+@(test)
+test_pack_single_word :: proc(t: ^testing.T) {
+	original := [8]byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	
+	packed, pack_err := pack(original[:])
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+	
+	// Tag should be 0x01 (only bit 0 set), followed by 0x01
+	testing.expect_value(t, len(packed), 2)
+	testing.expect_value(t, packed[0], u8(0x01))
+	testing.expect_value(t, packed[1], u8(0x01))
+	
+	// Roundtrip
+	unpacked, unpack_err := unpack(packed)
+	defer delete(unpacked)
+	testing.expect_value(t, unpack_err, Error.None)
+	testing.expect_value(t, len(unpacked), len(original))
+	for i in 0 ..< len(original) {
+		testing.expect_value(t, unpacked[i], original[i])
+	}
+}
+
+@(test)
+test_pack_max_zero_run :: proc(t: ^testing.T) {
+	// 256 zero words = 1 initial + 255 additional = exactly one max run
+	original, alloc_err := make([]byte, 256 * 8)
+	testing.expect(t, alloc_err == nil, "Allocation should succeed")
+	defer delete(original)
+	
+	packed, pack_err := pack(original)
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+	
+	// Should be: 00 FF (1 zero word + 255 additional = 256 total)
+	// = 2 bytes total
+	testing.expect_value(t, len(packed), 2)
+	testing.expect_value(t, packed[0], u8(0x00))
+	testing.expect_value(t, packed[1], u8(0xFF)) // 255 additional
+	
+	// Roundtrip
+	unpacked, unpack_err := unpack(packed)
+	defer delete(unpacked)
+	testing.expect_value(t, unpack_err, Error.None)
+	testing.expect_value(t, len(unpacked), len(original))
+}
+
+@(test)
+test_pack_max_zero_run_plus_one :: proc(t: ^testing.T) {
+	// 257 zero words = 1 initial + 255 additional + 1 more = needs two zero tags
+	original, alloc_err := make([]byte, 257 * 8)
+	testing.expect(t, alloc_err == nil, "Allocation should succeed")
+	defer delete(original)
+	
+	packed, pack_err := pack(original)
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+	
+	// Should be: 00 FF (256 zero words), 00 00 (1 more zero word)
+	// = 4 bytes total
+	testing.expect_value(t, len(packed), 4)
+	testing.expect_value(t, packed[0], u8(0x00))
+	testing.expect_value(t, packed[1], u8(0xFF)) // 255 additional
+	testing.expect_value(t, packed[2], u8(0x00))
+	testing.expect_value(t, packed[3], u8(0x00)) // 0 additional
+	
+	// Roundtrip
+	unpacked, unpack_err := unpack(packed)
+	defer delete(unpacked)
+	testing.expect_value(t, unpack_err, Error.None)
+	testing.expect_value(t, len(unpacked), len(original))
+}
+
+@(test)
+test_unpack_truncated_data :: proc(t: ^testing.T) {
+	// Tag says byte 0 is non-zero but no byte follows
+	truncated := [1]byte{0x01}
+	_, unpack_err := unpack(truncated[:])
+	testing.expect_value(t, unpack_err, Error.Invalid_Packed_Data)
+}
+
+@(test)
+test_unpack_truncated_zero_run :: proc(t: ^testing.T) {
+	// Tag 0x00 but no count byte
+	truncated := [1]byte{0x00}
+	_, unpack_err := unpack(truncated[:])
+	testing.expect_value(t, unpack_err, Error.Invalid_Packed_Data)
+}
+
+@(test)
+test_unpack_truncated_literal_run :: proc(t: ^testing.T) {
+	// Tag 0xFF with 8 bytes but no count byte
+	truncated := [9]byte{0xFF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	_, unpack_err := unpack(truncated[:])
+	testing.expect_value(t, unpack_err, Error.Invalid_Packed_Data)
+}
+
+@(test)
+test_pack_not_word_aligned :: proc(t: ^testing.T) {
+	// Input not a multiple of 8 bytes should fail
+	not_aligned := [7]byte{1, 2, 3, 4, 5, 6, 7}
+	_, pack_err := pack(not_aligned[:])
+	testing.expect_value(t, pack_err, Error.Invalid_Packed_Data)
+}
+
+@(test)
+test_serialize_packed_roundtrip :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	// Build a message with mixed data (some zeros, some non-zeros)
+	root, _ := message_builder_init_root(&mb, 2, 1)
+	struct_builder_set_u64(&root, 0, 0x12345678)
+	struct_builder_set_u64(&root, 8, 0)
+	struct_builder_set_text(&root, 0, "Hello, packed!")
+	
+	// Serialize packed
+	packed, pack_err := serialize_packed(&mb)
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+	
+	// Deserialize packed
+	reader, unpacked_data, unpack_err := deserialize_packed(packed)
+	defer message_reader_destroy(&reader)
+	defer delete(unpacked_data)
+	testing.expect_value(t, unpack_err, Error.None)
+	
+	// Verify data
+	sr, root_err := message_reader_get_root(&reader)
+	testing.expect_value(t, root_err, Error.None)
+	testing.expect_value(t, struct_reader_get_u64(&sr, 0), u64(0x12345678))
+	testing.expect_value(t, struct_reader_get_u64(&sr, 8), u64(0))
+	
+	text, text_err := struct_reader_get_text(&sr, 0)
+	testing.expect_value(t, text_err, Error.None)
+	testing.expect_value(t, text, "Hello, packed!")
+}
+
+@(test)
+test_packed_size_reduction :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	// Build a message with lots of zeros (typical Cap'n Proto pattern)
+	root, _ := message_builder_init_root(&mb, 8, 0) // 8 words of data, mostly zeros
+	struct_builder_set_u32(&root, 0, 100)
+	struct_builder_set_u32(&root, 16, 200)
+	
+	// Serialize unpacked
+	unpacked, _ := serialize(&mb)
+	defer delete(unpacked)
+	
+	// Serialize packed
+	packed, _ := serialize_packed(&mb)
+	defer delete(packed)
+	
+	// Packed should be smaller
+	testing.expect(t, len(packed) < len(unpacked), "Packed should be smaller than unpacked")
+}
+
+@(test)
+test_packed_complex_message :: proc(t: ^testing.T) {
+	mb: Message_Builder
+	message_builder_init(&mb)
+	defer message_builder_destroy(&mb)
+	
+	// Build a complex message
+	root, _ := message_builder_init_root(&mb, 2, 2)
+	struct_builder_set_u64(&root, 0, 0xDEADBEEF)
+	struct_builder_set_bool(&root, 64, true)
+	
+	// Nested struct
+	nested, _ := struct_builder_init_struct(&root, 0, 1, 0)
+	struct_builder_set_u32(&nested, 0, 42)
+	
+	// List
+	list, _ := struct_builder_init_list(&root, 1, .Four_Bytes, 3)
+	list_builder_set_u32(&list, 0, 100)
+	list_builder_set_u32(&list, 1, 200)
+	list_builder_set_u32(&list, 2, 300)
+	
+	// Serialize packed
+	packed, pack_err := serialize_packed(&mb)
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+	
+	// Deserialize packed
+	reader, unpacked_data, unpack_err := deserialize_packed(packed)
+	defer message_reader_destroy(&reader)
+	defer delete(unpacked_data)
+	testing.expect_value(t, unpack_err, Error.None)
+	
+	// Verify all data
+	sr, _ := message_reader_get_root(&reader)
+	testing.expect_value(t, struct_reader_get_u64(&sr, 0), u64(0xDEADBEEF))
+	testing.expect_value(t, struct_reader_get_bool(&sr, 64), true)
+	
+	nested_sr, _ := struct_reader_get_struct(&sr, 0)
+	testing.expect_value(t, struct_reader_get_u32(&nested_sr, 0), u32(42))
+	
+	lr, _ := struct_reader_get_list(&sr, 1, .Four_Bytes)
+	testing.expect_value(t, list_reader_len(&lr), u32(3))
+	testing.expect_value(t, list_reader_get_u32(&lr, 0), u32(100))
+	testing.expect_value(t, list_reader_get_u32(&lr, 1), u32(200))
+	testing.expect_value(t, list_reader_get_u32(&lr, 2), u32(300))
+}
+
+@(test)
+test_unpack_literal_words_with_zeros :: proc(t: ^testing.T) {
+	// Per spec: literal words after 0xFF "may or may not contain zeros"
+	// Construct packed data with 0xFF tag followed by literal words containing zeros
+	// Format: FF [8 bytes] [count] [literal words...]
+	packed := [?]byte{
+		0xFF, // tag: all 8 non-zero
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, // first word (all non-zero)
+		0x01, // 1 literal word follows
+		0xAA, 0x00, 0xBB, 0x00, 0xCC, 0x00, 0xDD, 0x00, // literal word WITH zeros
+	}
+
+	unpacked, unpack_err := unpack(packed[:])
+	defer delete(unpacked)
+	testing.expect_value(t, unpack_err, Error.None)
+	testing.expect_value(t, len(unpacked), 16) // 2 words = 16 bytes
+
+	// Verify first word
+	testing.expect_value(t, unpacked[0], u8(0x01))
+	testing.expect_value(t, unpacked[7], u8(0x08))
+
+	// Verify literal word with zeros was unpacked correctly
+	testing.expect_value(t, unpacked[8], u8(0xAA))
+	testing.expect_value(t, unpacked[9], u8(0x00))
+	testing.expect_value(t, unpacked[10], u8(0xBB))
+	testing.expect_value(t, unpacked[11], u8(0x00))
+	testing.expect_value(t, unpacked[12], u8(0xCC))
+	testing.expect_value(t, unpacked[13], u8(0x00))
+	testing.expect_value(t, unpacked[14], u8(0xDD))
+	testing.expect_value(t, unpacked[15], u8(0x00))
+}
+
+@(test)
+test_unpack_size_limit :: proc(t: ^testing.T) {
+	// Test that unpack respects size limits to prevent decompression bombs
+	// Create packed data that would expand to more than the limit
+	packed := [?]byte{
+		0x00, 0xFF, // Zero word + 255 additional = 256 words = 2048 bytes
+	}
+
+	// Unpack with a small limit
+	_, unpack_err := unpack(packed[:], max_output_size = 100)
+	testing.expect_value(t, unpack_err, Error.Segment_Size_Overflow)
+}
+
+@(test)
+test_pack_alternating_patterns :: proc(t: ^testing.T) {
+	// Alternating compressible and incompressible words
+	original := [?]byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // zero word
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, // all non-zero
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // zero word
+		0xFF, 0xFE, 0xFD, 0xFC, 0xFB, 0xFA, 0xF9, 0xF8, // all non-zero
+	}
+
+	packed, pack_err := pack(original[:])
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+
+	// Roundtrip
+	unpacked, unpack_err := unpack(packed)
+	defer delete(unpacked)
+	testing.expect_value(t, unpack_err, Error.None)
+	testing.expect_value(t, len(unpacked), len(original))
+
+	for i in 0 ..< len(original) {
+		testing.expect_value(t, unpacked[i], original[i])
+	}
+}
+
+@(test)
+test_pack_sparse_data :: proc(t: ^testing.T) {
+	// Data with only occasional non-zero bytes (common in Cap'n Proto)
+	original := [?]byte{
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 1 non-zero
+		0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, // 1 non-zero
+		0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, // 1 non-zero
+	}
+
+	packed, pack_err := pack(original[:])
+	defer delete(packed)
+	testing.expect_value(t, pack_err, Error.None)
+
+	// Should be well compressed (3 bytes become: tag + value each = 6 bytes total)
+	// 24 bytes -> 6 bytes = 75% reduction
+	testing.expect(t, len(packed) < len(original), "Sparse data should compress well")
+
+	// Roundtrip
+	unpacked, unpack_err := unpack(packed)
+	defer delete(unpacked)
+	testing.expect_value(t, unpack_err, Error.None)
+	testing.expect_value(t, len(unpacked), len(original))
+
+	for i in 0 ..< len(original) {
+		testing.expect_value(t, unpacked[i], original[i])
+	}
+}
+
+@(test)
+test_unpack_missing_literal_payload :: proc(t: ^testing.T) {
+	// 0xFF with count > 0 but missing literal data
+	packed := [?]byte{
+		0xFF, // tag
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, // 8 bytes
+		0x02, // count = 2 literal words expected
+		0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, // only 1 word provided
+	}
+
+	_, unpack_err := unpack(packed[:])
+	testing.expect_value(t, unpack_err, Error.Invalid_Packed_Data)
+}
+
+@(test)
+test_count_bits :: proc(t: ^testing.T) {
+	// Test the bit counting used in tag processing
+	test_cases := []struct {
+		input:    u8,
+		expected: int,
+	}{
+		{0x00, 0},
+		{0x01, 1},
+		{0x03, 2},
+		{0x07, 3},
+		{0x0F, 4},
+		{0xFF, 8},
+		{0x55, 4}, // 01010101
+		{0xAA, 4}, // 10101010
+	}
+
+	for tc in test_cases {
+		// We can't directly test private proc, but pack_word with specific patterns
+		// implicitly tests count_bits via tag creation
+		word: [8]byte
+		expected_non_zero := 0
+		for i in 0 ..< 8 {
+			if (tc.input & (1 << uint(i))) != 0 {
+				word[i] = 0xFF
+				expected_non_zero += 1
+			}
+		}
+		result, length := pack_word(word[:])
+		testing.expect_value(t, result[0], tc.input)
+		testing.expect_value(t, length, 1 + expected_non_zero)
+	}
+}
