@@ -130,8 +130,8 @@ frame_header_destroy :: proc(header: ^Frame_Header, allocator := context.allocat
 }
 
 // Calculate total size needed to serialize all segments (header + data)
-serialize_segments_size :: proc(sm: ^Segment_Manager) -> u32 {
-	segment_count := segment_manager_segment_count(sm)
+serialize_segments_size :: proc(manager: ^Segment_Manager) -> u32 {
+	segment_count := segment_manager_segment_count(manager)
 	if segment_count == 0 {
 		return 0
 	}
@@ -139,8 +139,8 @@ serialize_segments_size :: proc(sm: ^Segment_Manager) -> u32 {
 	header_size := frame_header_size(segment_count)
 	data_size: u32 = 0
 	for i in 0 ..< segment_count {
-		seg := segment_manager_get_segment(sm, i)
-		data_size += seg.used * WORD_SIZE_BYTES
+		segment := segment_manager_get_segment(manager, i)
+		data_size += segment.used * WORD_SIZE_BYTES
 	}
 	return header_size + data_size
 }
@@ -148,52 +148,52 @@ serialize_segments_size :: proc(sm: ^Segment_Manager) -> u32 {
 // Serialize all segments to a byte slice
 // Returns a newly allocated byte slice containing the complete message
 serialize_segments :: proc(
-	sm: ^Segment_Manager,
+	manager: ^Segment_Manager,
 	allocator := context.allocator,
 ) -> (data: []byte, err: Error) {
-	segment_count := segment_manager_segment_count(sm)
+	segment_count := segment_manager_segment_count(manager)
 	if segment_count == 0 {
 		return nil, .Invalid_Frame_Header
 	}
 
 	// Collect segment sizes
-	sizes, sizes_err := make([]u32, segment_count, allocator)
-	if sizes_err != nil {
+	sizes, sizes_error := make([]u32, segment_count, allocator)
+	if sizes_error != nil {
 		return nil, .Out_Of_Memory
 	}
 	defer delete(sizes, allocator)
 
 	total_words: u32 = 0
 	for i in 0 ..< segment_count {
-		seg := segment_manager_get_segment(sm, i)
-		sizes[i] = seg.used
-		total_words += seg.used
+		segment := segment_manager_get_segment(manager, i)
+		sizes[i] = segment.used
+		total_words += segment.used
 	}
 
 	// Allocate output buffer
 	header_size := frame_header_size(segment_count)
 	total_size := header_size + (total_words * WORD_SIZE_BYTES)
 	
-	buffer, alloc_err := make([]byte, total_size, allocator)
-	if alloc_err != nil {
+	buffer, allocation_error := make([]byte, total_size, allocator)
+	if allocation_error != nil {
 		return nil, .Out_Of_Memory
 	}
 
 	// Write header
-	_, header_err := serialize_frame_header(sizes, buffer)
-	if header_err != .None {
+	_, header_error := serialize_frame_header(sizes, buffer)
+	if header_error != .None {
 		delete(buffer, allocator)
-		return nil, header_err
+		return nil, header_error
 	}
 
 	// Write segment data
 	offset := header_size
 	for i in 0 ..< segment_count {
-		seg := segment_manager_get_segment(sm, i)
-		seg_data := segment_get_data(seg)
-		seg_bytes := slice.to_bytes(seg_data)
-		copy(buffer[offset:], seg_bytes)
-		offset += seg.used * WORD_SIZE_BYTES
+		segment := segment_manager_get_segment(manager, i)
+		segment_data := segment_get_data(segment)
+		segment_bytes := slice.to_bytes(segment_data)
+		copy(buffer[offset:], segment_bytes)
+		offset += segment.used * WORD_SIZE_BYTES
 	}
 
 	return buffer, .None
@@ -204,11 +204,11 @@ serialize_segments :: proc(
 deserialize_segments :: proc(
 	data: []byte,
 	allocator := context.allocator,
-) -> (sm: Segment_Manager, bytes_read: u32, err: Error) {
+) -> (manager: Segment_Manager, bytes_read: u32, err: Error) {
 	// Parse header
-	header, header_size, header_err := deserialize_frame_header(data, allocator)
-	if header_err != .None {
-		return {}, 0, header_err
+	header, header_size, header_error := deserialize_frame_header(data, allocator)
+	if header_error != .None {
+		return {}, 0, header_error
 	}
 	defer frame_header_destroy(&header, allocator)
 
@@ -224,28 +224,28 @@ deserialize_segments :: proc(
 	}
 
 	// Initialize segment manager
-	segment_manager_init(&sm, DEFAULT_SEGMENT_SIZE, allocator)
+	segment_manager_init(&manager, DEFAULT_SEGMENT_SIZE, allocator)
 
 	// Create segments from data
 	offset := header_size
 	for i in 0 ..< header.segment_count {
-		seg_size := header.segment_sizes[i]
+		segment_size := header.segment_sizes[i]
 		
 		// Create segment with exact size
-		seg, seg_err := segment_create(i, seg_size, allocator)
-		if seg_err != .None {
-			segment_manager_destroy(&sm)
-			return {}, 0, seg_err
+		segment, segment_error := segment_create(i, segment_size, allocator)
+		if segment_error != .None {
+			segment_manager_destroy(&manager)
+			return {}, 0, segment_error
 		}
 		
 		// Copy data into segment
-		seg_bytes := slice.to_bytes(seg.data)
-		copy(seg_bytes, data[offset:offset + seg_size * WORD_SIZE_BYTES])
-		seg.used = seg_size
+		segment_bytes := slice.to_bytes(segment.data)
+		copy(segment_bytes, data[offset:offset + segment_size * WORD_SIZE_BYTES])
+		segment.used = segment_size
 		
-		append(&sm.segments, seg)
-		offset += seg_size * WORD_SIZE_BYTES
+		append(&manager.segments, segment)
+		offset += segment_size * WORD_SIZE_BYTES
 	}
 
-	return sm, expected_size, .None
+	return manager, expected_size, .None
 }

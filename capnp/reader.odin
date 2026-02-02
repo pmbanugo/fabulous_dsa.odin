@@ -183,11 +183,11 @@ struct_reader_data_ptr :: proc(sr: ^Struct_Reader, byte_offset: u32) -> ^byte {
 }
 
 // Check if a pointer index is valid and non-null
-struct_reader_has_pointer :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> bool {
-	if ptr_idx >= sr.pointer_count {
+struct_reader_has_pointer :: proc(sr: ^Struct_Reader, pointer_index: u16) -> bool {
+	if pointer_index >= sr.pointer_count {
 		return false
 	}
-	pointer_word_offset := sr.data_offset + u32(sr.data_size) + u32(ptr_idx)
+	pointer_word_offset := sr.data_offset + u32(sr.data_size) + u32(pointer_index)
 	if pointer_word_offset >= u32(len(sr.segment)) {
 		return false
 	}
@@ -196,11 +196,11 @@ struct_reader_has_pointer :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> bool {
 
 // Get pointer word at index
 @(private)
-struct_reader_get_pointer_word :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (raw: u64, offset: u32, ok: bool) {
-	if ptr_idx >= sr.pointer_count {
+struct_reader_get_pointer_word :: proc(sr: ^Struct_Reader, pointer_index: u16) -> (raw: u64, offset: u32, ok: bool) {
+	if pointer_index >= sr.pointer_count {
 		return 0, 0, false
 	}
-	pointer_word_offset := sr.data_offset + u32(sr.data_size) + u32(ptr_idx)
+	pointer_word_offset := sr.data_offset + u32(sr.data_size) + u32(pointer_index)
 	if pointer_word_offset >= u32(len(sr.segment)) {
 		return 0, 0, false
 	}
@@ -331,13 +331,13 @@ struct_reader_get_f64 :: proc(sr: ^Struct_Reader, offset: u32, default: f64 = 0)
 }
 
 // Get nested struct at pointer index
-struct_reader_get_struct :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (nested: Struct_Reader, err: Error) {
+struct_reader_get_struct :: proc(sr: ^Struct_Reader, pointer_index: u16) -> (nested: Struct_Reader, err: Error) {
 	// Check nesting limit
 	if err := check_nesting_limit(sr.nesting_limit); err != .None {
 		return {}, err
 	}
 	
-	raw_ptr, ptr_offset, ok := struct_reader_get_pointer_word(sr, ptr_idx)
+	raw_ptr, pointer_offset, ok := struct_reader_get_pointer_word(sr, pointer_index)
 	if !ok {
 		// Out of bounds pointer section - return empty struct
 		return Struct_Reader{
@@ -369,9 +369,9 @@ struct_reader_get_struct :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (nested: S
 		nesting_limit    = sr.nesting_limit,
 	}
 	
-	validated, validate_err := validate_struct_pointer(&ctx, sr.segment_id, ptr_offset, raw_ptr)
-	if validate_err != .None {
-		return {}, validate_err
+	validated, validation_error := validate_struct_pointer(&ctx, sr.segment_id, pointer_offset, raw_ptr)
+	if validation_error != .None {
+		return {}, validation_error
 	}
 	
 	return Struct_Reader{
@@ -388,7 +388,7 @@ struct_reader_get_struct :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (nested: S
 // Get list at pointer index
 struct_reader_get_list :: proc(
 	sr: ^Struct_Reader,
-	ptr_idx: u16,
+	pointer_index: u16,
 	expected_element_size: Element_Size = .Void,
 ) -> (list: List_Reader, err: Error) {
 	// Check nesting limit
@@ -396,7 +396,7 @@ struct_reader_get_list :: proc(
 		return {}, err
 	}
 	
-	raw_ptr, ptr_offset, ok := struct_reader_get_pointer_word(sr, ptr_idx)
+	raw_ptr, pointer_offset, ok := struct_reader_get_pointer_word(sr, pointer_index)
 	if !ok {
 		// Out of bounds - return empty list
 		return List_Reader{
@@ -428,29 +428,29 @@ struct_reader_get_list :: proc(
 		nesting_limit    = sr.nesting_limit,
 	}
 	
-	validated, validate_err := validate_list_pointer(&ctx, sr.segment_id, ptr_offset, raw_ptr, expected_element_size)
-	if validate_err != .None {
-		return {}, validate_err
+	validated, validation_error := validate_list_pointer(&ctx, sr.segment_id, pointer_offset, raw_ptr, expected_element_size)
+	if validation_error != .None {
+		return {}, validation_error
 	}
 	
 	return List_Reader{
-		segment_id       = validated.segment_id,
-		segment          = validated.segment,
-		data_offset      = validated.data_offset,
-		element_count    = validated.element_count,
-		element_size     = validated.element_size,
-		struct_data_size = validated.struct_data_size,
-		struct_ptr_count = validated.struct_ptr_count,
-		nesting_limit    = sr.nesting_limit - 1,
-		message          = sr.message,
+		segment_id            = validated.segment_id,
+		segment               = validated.segment,
+		data_offset           = validated.data_offset,
+		element_count         = validated.element_count,
+		element_size          = validated.element_size,
+		struct_data_size      = validated.struct_data_size,
+		struct_pointer_count  = validated.struct_pointer_count,
+		nesting_limit         = sr.nesting_limit - 1,
+		message               = sr.message,
 	}, .None
 }
 
 // Get text at pointer index (NUL-terminated string)
-struct_reader_get_text :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (text: string, err: Error) {
-	list, list_err := struct_reader_get_list(sr, ptr_idx, .Byte)
-	if list_err != .None {
-		return "", list_err
+struct_reader_get_text :: proc(sr: ^Struct_Reader, pointer_index: u16) -> (text: string, err: Error) {
+	list, list_error := struct_reader_get_list(sr, pointer_index, .Byte)
+	if list_error != .None {
+		return "", list_error
 	}
 	
 	if list.element_count == 0 {
@@ -465,10 +465,10 @@ struct_reader_get_text :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (text: strin
 }
 
 // Get data at pointer index (raw bytes)
-struct_reader_get_data :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (data: []byte, err: Error) {
-	list, list_err := struct_reader_get_list(sr, ptr_idx, .Byte)
-	if list_err != .None {
-		return nil, list_err
+struct_reader_get_data :: proc(sr: ^Struct_Reader, pointer_index: u16) -> (data: []byte, err: Error) {
+	list, list_error := struct_reader_get_list(sr, pointer_index, .Byte)
+	if list_error != .None {
+		return nil, list_error
 	}
 	
 	if list.element_count == 0 {
@@ -484,16 +484,16 @@ struct_reader_get_data :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (data: []byt
 // ============================================================================
 
 List_Reader :: struct {
-	segment_id:       u32,
-	segment:          []Word,
-	data_offset:      u32,
-	element_count:    u32,
-	element_size:     Element_Size,
+	segment_id:           u32,
+	segment:              []Word,
+	data_offset:          u32,
+	element_count:        u32,
+	element_size:         Element_Size,
 	// For composite lists:
-	struct_data_size: u16,
-	struct_ptr_count: u16,
-	nesting_limit:    int,
-	message:          ^Message_Reader,
+	struct_data_size:     u16,
+	struct_pointer_count: u16,
+	nesting_limit:        int,
+	message:              ^Message_Reader,
 }
 
 // Get element count
@@ -662,7 +662,7 @@ list_reader_get_struct :: proc(lr: ^List_Reader, index: u32) -> (sr: Struct_Read
 		return {}, .Invalid_Element_Size
 	}
 	
-	words_per_element := u32(lr.struct_data_size) + u32(lr.struct_ptr_count)
+	words_per_element := u32(lr.struct_data_size) + u32(lr.struct_pointer_count)
 	
 	// Use u64 for overflow safety
 	element_offset_u64 := u64(lr.data_offset) + (u64(index) * u64(words_per_element))
@@ -676,7 +676,7 @@ list_reader_get_struct :: proc(lr: ^List_Reader, index: u32) -> (sr: Struct_Read
 		segment       = lr.segment,
 		data_offset   = element_offset,
 		data_size     = lr.struct_data_size,
-		pointer_count = lr.struct_ptr_count,
+		pointer_count = lr.struct_pointer_count,
 		nesting_limit = lr.nesting_limit - 1,
 		message       = lr.message,
 	}, .None

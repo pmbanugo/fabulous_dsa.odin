@@ -447,7 +447,7 @@ Segment :: struct {
 Segment_Manager :: struct {
     segments:         [dynamic]Segment,   // Remembers its allocator automatically
     allocator:        mem.Allocator,      // Odin allocator for segment data ([]Word)
-    default_seg_size: u32,                // Default segment size in words
+    default_segment_size: u32,            // Default segment size in words
 }
 
 // Note: [dynamic]Segment remembers its allocator, so delete() works correctly.
@@ -637,10 +637,10 @@ struct_builder_set_i64 :: proc(sb: ^Struct_Builder, offset: u32, value: i64)
 struct_builder_set_f32 :: proc(sb: ^Struct_Builder, offset: u32, value: f32)
 struct_builder_set_f64 :: proc(sb: ^Struct_Builder, offset: u32, value: f64)
 
-struct_builder_init_struct :: proc(sb: ^Struct_Builder, ptr_idx: u16, data_words, ptr_words: u16) -> Struct_Builder
-struct_builder_init_list :: proc(sb: ^Struct_Builder, ptr_idx: u16, elem_size: Element_Size, count: u32) -> List_Builder
-struct_builder_set_text :: proc(sb: ^Struct_Builder, ptr_idx: u16, text: string) -> Error
-struct_builder_set_data :: proc(sb: ^Struct_Builder, ptr_idx: u16, data: []byte) -> Error
+struct_builder_init_struct :: proc(sb: ^Struct_Builder, pointer_index: u16, data_words, pointer_count: u16) -> Struct_Builder
+struct_builder_init_list :: proc(sb: ^Struct_Builder, pointer_index: u16, element_size: Element_Size, count: u32) -> List_Builder
+struct_builder_set_text :: proc(sb: ^Struct_Builder, pointer_index: u16, text: string) -> Error
+struct_builder_set_data :: proc(sb: ^Struct_Builder, pointer_index: u16, data: []byte) -> Error
 
 // List building
 list_builder_set_bool :: proc(lb: ^List_Builder, index: u32, value: bool)
@@ -663,11 +663,11 @@ struct_reader_get_u8 :: proc(sr: ^Struct_Reader, offset: u32, default: u8 = 0) -
 struct_reader_get_u16 :: proc(sr: ^Struct_Reader, offset: u32, default: u16 = 0) -> u16
 // ... etc for all primitive types
 
-struct_reader_get_struct :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (Struct_Reader, Error)
-struct_reader_get_list :: proc(sr: ^Struct_Reader, ptr_idx: u16, expected: Element_Size) -> (List_Reader, Error)
-struct_reader_get_text :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> (string, Error)
-struct_reader_get_data :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> ([]byte, Error)
-struct_reader_has_pointer :: proc(sr: ^Struct_Reader, ptr_idx: u16) -> bool
+struct_reader_get_struct :: proc(sr: ^Struct_Reader, pointer_index: u16) -> (Struct_Reader, Error)
+struct_reader_get_list :: proc(sr: ^Struct_Reader, pointer_index: u16, expected: Element_Size) -> (List_Reader, Error)
+struct_reader_get_text :: proc(sr: ^Struct_Reader, pointer_index: u16) -> (string, Error)
+struct_reader_get_data :: proc(sr: ^Struct_Reader, pointer_index: u16) -> ([]byte, Error)
+struct_reader_has_pointer :: proc(sr: ^Struct_Reader, pointer_index: u16) -> bool
 
 // List reading
 list_reader_len :: proc(lr: ^List_Reader) -> u32

@@ -14,9 +14,21 @@ An adventure and experiment on Data Structure and Algorithms, implemented in Odi
   - [Design Document](capnp/DESIGN.md) - Architecture and specification
   - [Implementation Roadmap](capnp/IMPLEMENTATION.md) - Phase-by-phase task tracking
 
-## Testing
+## Development
 
-Run all tests:
+### Type-checking
+
+This repository contains library packages (no `main` entry point). Use `-no-entry-point` when type-checking:
+
+```sh
+odin check capnp/ -no-entry-point
+odin check binary_fuse_filters/ -no-entry-point
+odin check hash_tables/ -no-entry-point
+```
+
+### Testing
+
+Run tests for each package:
 
 ```sh
 odin test binary_fuse_filters/
@@ -24,7 +36,7 @@ odin test hash_tables/
 odin test capnp/
 ```
 
-Or run tests for a specific package from within its directory:
+Or run tests from within a package directory:
 
 ```sh
 cd binary_fuse_filters && odin test .

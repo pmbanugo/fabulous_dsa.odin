@@ -245,19 +245,19 @@ struct_builder_set_f64 :: proc(sb: ^Struct_Builder, offset: u32, value: f64) {
 
 // Get pointer to the pointer section at given index
 @(private)
-struct_pointer_slot :: proc(sb: ^Struct_Builder, ptr_idx: u16) -> ^Word {
-	pointer_offset := sb.data_offset + u32(sb.data_words) + u32(ptr_idx)
+struct_pointer_slot :: proc(sb: ^Struct_Builder, pointer_index: u16) -> ^Word {
+	pointer_offset := sb.data_offset + u32(sb.data_words) + u32(pointer_index)
 	return &sb.segment.data[pointer_offset]
 }
 
 // Initialize a nested struct at the given pointer index
 struct_builder_init_struct :: proc(
 	sb: ^Struct_Builder,
-	ptr_idx: u16,
+	pointer_index: u16,
 	data_words: u16,
 	pointer_count: u16,
 ) -> (nested: Struct_Builder, err: Error) {
-	if ptr_idx >= sb.pointer_count {
+	if pointer_index >= sb.pointer_count {
 		return {}, .Pointer_Out_Of_Bounds
 	}
 	
@@ -266,7 +266,7 @@ struct_builder_init_struct :: proc(
 	// Special case: zero-sized struct uses offset = -1, no allocation needed
 	if struct_words == 0 {
 		ptr := struct_pointer_encode(-1, 0, 0)
-		struct_pointer_slot(sb, ptr_idx)^ = ptr
+		struct_pointer_slot(sb, pointer_index)^ = ptr
 		
 		return Struct_Builder{
 			segment       = sb.segment,
@@ -278,25 +278,25 @@ struct_builder_init_struct :: proc(
 	}
 	
 	// Try to allocate in current segment first
-	alloc_offset, ok := segment_allocate(sb.segment, struct_words)
+	allocation_offset, ok := segment_allocate(sb.segment, struct_words)
 	
 	if ok {
 		// Same segment - calculate relative offset
-		pointer_word_idx := sb.data_offset + u32(sb.data_words) + u32(ptr_idx)
+		pointer_word_index := sb.data_offset + u32(sb.data_words) + u32(pointer_index)
 		// offset = target - (pointer_location + 1)
-		rel_offset := i64(alloc_offset) - i64(pointer_word_idx + 1)
+		relative_offset := i64(allocation_offset) - i64(pointer_word_index + 1)
 		
 		// Validate offset fits in 30-bit signed field
-		if rel_offset < -(1 << 29) || rel_offset > (1 << 29) - 1 {
+		if relative_offset < -(1 << 29) || relative_offset > (1 << 29) - 1 {
 			return {}, .Pointer_Out_Of_Bounds
 		}
 		
-		ptr := struct_pointer_encode(i32(rel_offset), data_words, pointer_count)
-		struct_pointer_slot(sb, ptr_idx)^ = ptr
+		ptr := struct_pointer_encode(i32(relative_offset), data_words, pointer_count)
+		struct_pointer_slot(sb, pointer_index)^ = ptr
 		
 		return Struct_Builder{
 			segment       = sb.segment,
-			data_offset   = alloc_offset,
+			data_offset   = allocation_offset,
 			data_words    = data_words,
 			pointer_count = pointer_count,
 			manager       = sb.manager,
@@ -306,23 +306,23 @@ struct_builder_init_struct :: proc(
 	// Need to allocate in a new segment - use far pointer
 	// Allocate landing pad (1 word) + struct content
 	landing_and_struct := 1 + struct_words
-	seg_id, far_offset, alloc_err := segment_manager_allocate(sb.manager, landing_and_struct)
-	if alloc_err != .None {
-		return {}, alloc_err
+	segment_id, far_offset, allocation_error := segment_manager_allocate(sb.manager, landing_and_struct)
+	if allocation_error != .None {
+		return {}, allocation_error
 	}
 	
-	target_seg := segment_manager_get_segment(sb.manager, seg_id)
+	target_segment := segment_manager_get_segment(sb.manager, segment_id)
 	
 	// Landing pad at far_offset contains struct pointer with offset 0
 	landing_pad := struct_pointer_encode(0, data_words, pointer_count)
-	segment_set_word(target_seg, far_offset, landing_pad)
+	segment_set_word(target_segment, far_offset, landing_pad)
 	
 	// Far pointer at source
-	far_ptr := far_pointer_encode(false, far_offset, seg_id)
-	struct_pointer_slot(sb, ptr_idx)^ = far_ptr
+	far_ptr := far_pointer_encode(false, far_offset, segment_id)
+	struct_pointer_slot(sb, pointer_index)^ = far_ptr
 	
 	return Struct_Builder{
-		segment       = target_seg,
+		segment       = target_segment,
 		data_offset   = far_offset + 1, // struct content after landing pad
 		data_words    = data_words,
 		pointer_count = pointer_count,
@@ -333,11 +333,11 @@ struct_builder_init_struct :: proc(
 // Initialize a primitive list at the given pointer index
 struct_builder_init_list :: proc(
 	sb: ^Struct_Builder,
-	ptr_idx: u16,
+	pointer_index: u16,
 	element_size: Element_Size,
 	count: u32,
 ) -> (lb: List_Builder, err: Error) {
-	if ptr_idx >= sb.pointer_count {
+	if pointer_index >= sb.pointer_count {
 		return {}, .Pointer_Out_Of_Bounds
 	}
 	
@@ -352,82 +352,82 @@ struct_builder_init_list :: proc(
 	// Special case: zero-length or zero-sized list - no allocation needed
 	if total_words == 0 {
 		ptr := list_pointer_encode(0, element_size, count)
-		struct_pointer_slot(sb, ptr_idx)^ = ptr
+		struct_pointer_slot(sb, pointer_index)^ = ptr
 		
 		return List_Builder{
-			segment      = sb.segment,
-			data_offset  = 0, // Won't be dereferenced
-			count        = count,
-			element_size = element_size,
-			data_words   = 0,
-			ptr_count    = 0,
-			manager      = sb.manager,
+			segment        = sb.segment,
+			data_offset    = 0, // Won't be dereferenced
+			count          = count,
+			element_size   = element_size,
+			data_words     = 0,
+			pointer_count  = 0,
+			manager        = sb.manager,
 		}, .None
 	}
 	
 	// Try same segment first
-	alloc_offset, ok := segment_allocate(sb.segment, total_words)
+	allocation_offset, ok := segment_allocate(sb.segment, total_words)
 	
 	if ok {
-		pointer_word_idx := sb.data_offset + u32(sb.data_words) + u32(ptr_idx)
-		rel_offset := i64(alloc_offset) - i64(pointer_word_idx + 1)
+		pointer_word_index := sb.data_offset + u32(sb.data_words) + u32(pointer_index)
+		relative_offset := i64(allocation_offset) - i64(pointer_word_index + 1)
 		
 		// Validate offset fits in 30-bit signed field
-		if rel_offset < -(1 << 29) || rel_offset > (1 << 29) - 1 {
+		if relative_offset < -(1 << 29) || relative_offset > (1 << 29) - 1 {
 			return {}, .Pointer_Out_Of_Bounds
 		}
 		
-		ptr := list_pointer_encode(i32(rel_offset), element_size, count)
-		struct_pointer_slot(sb, ptr_idx)^ = ptr
+		ptr := list_pointer_encode(i32(relative_offset), element_size, count)
+		struct_pointer_slot(sb, pointer_index)^ = ptr
 		
 		return List_Builder{
-			segment      = sb.segment,
-			data_offset  = alloc_offset,
-			count        = count,
-			element_size = element_size,
-			data_words   = 0,
-			ptr_count    = 0,
-			manager      = sb.manager,
+			segment        = sb.segment,
+			data_offset    = allocation_offset,
+			count          = count,
+			element_size   = element_size,
+			data_words     = 0,
+			pointer_count  = 0,
+			manager        = sb.manager,
 		}, .None
 	}
 	
 	// Cross-segment with far pointer
 	landing_and_list := 1 + total_words
-	seg_id, offset, alloc_err := segment_manager_allocate(sb.manager, landing_and_list)
-	if alloc_err != .None {
-		return {}, alloc_err
+	segment_id, offset, allocation_error := segment_manager_allocate(sb.manager, landing_and_list)
+	if allocation_error != .None {
+		return {}, allocation_error
 	}
 	
-	target_seg := segment_manager_get_segment(sb.manager, seg_id)
+	target_segment := segment_manager_get_segment(sb.manager, segment_id)
 	
 	// Landing pad with list pointer
 	landing_pad := list_pointer_encode(0, element_size, count)
-	segment_set_word(target_seg, offset, landing_pad)
+	segment_set_word(target_segment, offset, landing_pad)
 	
 	// Far pointer at source
-	far_ptr := far_pointer_encode(false, offset, seg_id)
-	struct_pointer_slot(sb, ptr_idx)^ = far_ptr
+	far_ptr := far_pointer_encode(false, offset, segment_id)
+	struct_pointer_slot(sb, pointer_index)^ = far_ptr
 	
 	return List_Builder{
-		segment      = target_seg,
-		data_offset  = offset + 1,
-		count        = count,
-		element_size = element_size,
-		data_words   = 0,
-		ptr_count    = 0,
-		manager      = sb.manager,
+		segment        = target_segment,
+		data_offset    = offset + 1,
+		count          = count,
+		element_size   = element_size,
+		data_words     = 0,
+		pointer_count  = 0,
+		manager        = sb.manager,
 	}, .None
 }
 
 // Initialize a composite (struct) list at the given pointer index
 struct_builder_init_struct_list :: proc(
 	sb: ^Struct_Builder,
-	ptr_idx: u16,
+	pointer_index: u16,
 	count: u32,
 	data_words: u16,
 	pointer_count: u16,
 ) -> (lb: List_Builder, err: Error) {
-	if ptr_idx >= sb.pointer_count {
+	if pointer_index >= sb.pointer_count {
 		return {}, .Pointer_Out_Of_Bounds
 	}
 	
@@ -437,76 +437,76 @@ struct_builder_init_struct_list :: proc(
 	
 	// Note: Even for count=0, we still need the tag word for composite lists
 	
-	alloc_offset, ok := segment_allocate(sb.segment, total_words)
+	allocation_offset, ok := segment_allocate(sb.segment, total_words)
 	
 	if ok {
-		pointer_word_idx := sb.data_offset + u32(sb.data_words) + u32(ptr_idx)
-		rel_offset := i64(alloc_offset) - i64(pointer_word_idx + 1)
+		pointer_word_index := sb.data_offset + u32(sb.data_words) + u32(pointer_index)
+		relative_offset := i64(allocation_offset) - i64(pointer_word_index + 1)
 		
 		// Validate offset fits in 30-bit signed field
-		if rel_offset < -(1 << 29) || rel_offset > (1 << 29) - 1 {
+		if relative_offset < -(1 << 29) || relative_offset > (1 << 29) - 1 {
 			return {}, .Pointer_Out_Of_Bounds
 		}
 		
 		// List pointer: element_size = Composite, element_count = total words (not including tag)
-		ptr := list_pointer_encode(i32(rel_offset), .Composite, content_words)
-		struct_pointer_slot(sb, ptr_idx)^ = ptr
+		ptr := list_pointer_encode(i32(relative_offset), .Composite, content_words)
+		struct_pointer_slot(sb, pointer_index)^ = ptr
 		
 		// Tag word: struct pointer format with offset field = element count (unsigned)
 		// We use struct_pointer_encode but the "offset" field here holds element count
 		tag := struct_pointer_encode(i32(count), data_words, pointer_count)
-		segment_set_word(sb.segment, alloc_offset, tag)
+		segment_set_word(sb.segment, allocation_offset, tag)
 		
 		return List_Builder{
-			segment      = sb.segment,
-			data_offset  = alloc_offset + 1, // content starts after tag
-			count        = count,
-			element_size = .Composite,
-			data_words   = data_words,
-			ptr_count    = pointer_count,
-			manager      = sb.manager,
+			segment        = sb.segment,
+			data_offset    = allocation_offset + 1, // content starts after tag
+			count          = count,
+			element_size   = .Composite,
+			data_words     = data_words,
+			pointer_count  = pointer_count,
+			manager        = sb.manager,
 		}, .None
 	}
 	
 	// Cross-segment with far pointer
 	landing_and_content := 1 + total_words
-	seg_id, offset, alloc_err := segment_manager_allocate(sb.manager, landing_and_content)
-	if alloc_err != .None {
-		return {}, alloc_err
+	segment_id, offset, allocation_error := segment_manager_allocate(sb.manager, landing_and_content)
+	if allocation_error != .None {
+		return {}, allocation_error
 	}
 	
-	target_seg := segment_manager_get_segment(sb.manager, seg_id)
+	target_segment := segment_manager_get_segment(sb.manager, segment_id)
 	
 	// Landing pad: list pointer with offset 0
 	landing_pad := list_pointer_encode(0, .Composite, content_words)
-	segment_set_word(target_seg, offset, landing_pad)
+	segment_set_word(target_segment, offset, landing_pad)
 	
 	// Tag word at offset+1: struct pointer format with offset field = element count
 	tag := struct_pointer_encode(i32(count), data_words, pointer_count)
-	segment_set_word(target_seg, offset + 1, tag)
+	segment_set_word(target_segment, offset + 1, tag)
 	
 	// Far pointer at source
-	far_ptr := far_pointer_encode(false, offset, seg_id)
-	struct_pointer_slot(sb, ptr_idx)^ = far_ptr
+	far_ptr := far_pointer_encode(false, offset, segment_id)
+	struct_pointer_slot(sb, pointer_index)^ = far_ptr
 	
 	return List_Builder{
-		segment      = target_seg,
-		data_offset  = offset + 2, // content starts after landing pad + tag
-		count        = count,
-		element_size = .Composite,
-		data_words   = data_words,
-		ptr_count    = pointer_count,
-		manager      = sb.manager,
+		segment        = target_segment,
+		data_offset    = offset + 2, // content starts after landing pad + tag
+		count          = count,
+		element_size   = .Composite,
+		data_words     = data_words,
+		pointer_count  = pointer_count,
+		manager        = sb.manager,
 	}, .None
 }
 
 // Set text at the given pointer index (NUL-terminated)
 struct_builder_set_text :: proc(
 	sb: ^Struct_Builder,
-	ptr_idx: u16,
+	pointer_index: u16,
 	text: string,
 ) -> Error {
-	if ptr_idx >= sb.pointer_count {
+	if pointer_index >= sb.pointer_count {
 		return .Pointer_Out_Of_Bounds
 	}
 	
@@ -516,49 +516,49 @@ struct_builder_set_text :: proc(
 	length := u32(len(text_bytes)) + 1 // +1 for NUL
 	words_needed := (length + 7) / 8
 	
-	alloc_offset, ok := segment_allocate(sb.segment, words_needed)
+	allocation_offset, ok := segment_allocate(sb.segment, words_needed)
 	
 	if ok {
-		pointer_word_idx := sb.data_offset + u32(sb.data_words) + u32(ptr_idx)
-		rel_offset := i64(alloc_offset) - i64(pointer_word_idx + 1)
+		pointer_word_index := sb.data_offset + u32(sb.data_words) + u32(pointer_index)
+		relative_offset := i64(allocation_offset) - i64(pointer_word_index + 1)
 		
 		// Validate offset fits in 30-bit signed field
-		if rel_offset < -(1 << 29) || rel_offset > (1 << 29) - 1 {
+		if relative_offset < -(1 << 29) || relative_offset > (1 << 29) - 1 {
 			return .Pointer_Out_Of_Bounds
 		}
 		
-		ptr := list_pointer_encode(i32(rel_offset), .Byte, length)
-		struct_pointer_slot(sb, ptr_idx)^ = ptr
+		ptr := list_pointer_encode(i32(relative_offset), .Byte, length)
+		struct_pointer_slot(sb, pointer_index)^ = ptr
 		
 		// Copy text data
-		dest := slice.to_bytes(sb.segment.data[alloc_offset:])
-		copy(dest, text_bytes)
-		dest[len(text_bytes)] = 0 // NUL terminator
+		destination := slice.to_bytes(sb.segment.data[allocation_offset:])
+		copy(destination, text_bytes)
+		destination[len(text_bytes)] = 0 // NUL terminator
 		
 		return .None
 	}
 	
 	// Cross-segment
 	landing_and_text := 1 + words_needed
-	seg_id, offset, alloc_err := segment_manager_allocate(sb.manager, landing_and_text)
-	if alloc_err != .None {
-		return alloc_err
+	segment_id, offset, allocation_error := segment_manager_allocate(sb.manager, landing_and_text)
+	if allocation_error != .None {
+		return allocation_error
 	}
 	
-	target_seg := segment_manager_get_segment(sb.manager, seg_id)
+	target_segment := segment_manager_get_segment(sb.manager, segment_id)
 	
 	// Landing pad
 	landing_pad := list_pointer_encode(0, .Byte, length)
-	segment_set_word(target_seg, offset, landing_pad)
+	segment_set_word(target_segment, offset, landing_pad)
 	
 	// Copy text
-	dest := slice.to_bytes(target_seg.data[offset + 1:])
-	copy(dest, text_bytes)
-	dest[len(text_bytes)] = 0
+	destination := slice.to_bytes(target_segment.data[offset + 1:])
+	copy(destination, text_bytes)
+	destination[len(text_bytes)] = 0
 	
 	// Far pointer
-	far_ptr := far_pointer_encode(false, offset, seg_id)
-	struct_pointer_slot(sb, ptr_idx)^ = far_ptr
+	far_ptr := far_pointer_encode(false, offset, segment_id)
+	struct_pointer_slot(sb, pointer_index)^ = far_ptr
 	
 	return .None
 }
@@ -566,10 +566,10 @@ struct_builder_set_text :: proc(
 // Set data blob at the given pointer index
 struct_builder_set_data :: proc(
 	sb: ^Struct_Builder,
-	ptr_idx: u16,
+	pointer_index: u16,
 	data: []byte,
 ) -> Error {
-	if ptr_idx >= sb.pointer_count {
+	if pointer_index >= sb.pointer_count {
 		return .Pointer_Out_Of_Bounds
 	}
 	
@@ -579,53 +579,53 @@ struct_builder_set_data :: proc(
 	// Special case: zero-length data - no allocation needed
 	if length == 0 {
 		ptr := list_pointer_encode(0, .Byte, 0)
-		struct_pointer_slot(sb, ptr_idx)^ = ptr
+		struct_pointer_slot(sb, pointer_index)^ = ptr
 		return .None
 	}
 	
 	words_needed := (length + 7) / 8
 	
-	alloc_offset, ok := segment_allocate(sb.segment, words_needed)
+	allocation_offset, ok := segment_allocate(sb.segment, words_needed)
 	
 	if ok {
-		pointer_word_idx := sb.data_offset + u32(sb.data_words) + u32(ptr_idx)
-		rel_offset := i64(alloc_offset) - i64(pointer_word_idx + 1)
+		pointer_word_index := sb.data_offset + u32(sb.data_words) + u32(pointer_index)
+		relative_offset := i64(allocation_offset) - i64(pointer_word_index + 1)
 		
 		// Validate offset fits in 30-bit signed field
-		if rel_offset < -(1 << 29) || rel_offset > (1 << 29) - 1 {
+		if relative_offset < -(1 << 29) || relative_offset > (1 << 29) - 1 {
 			return .Pointer_Out_Of_Bounds
 		}
 		
-		ptr := list_pointer_encode(i32(rel_offset), .Byte, length)
-		struct_pointer_slot(sb, ptr_idx)^ = ptr
+		ptr := list_pointer_encode(i32(relative_offset), .Byte, length)
+		struct_pointer_slot(sb, pointer_index)^ = ptr
 		
 		// Copy data
-		dest := slice.to_bytes(sb.segment.data[alloc_offset:])
-		copy(dest, data)
+		destination := slice.to_bytes(sb.segment.data[allocation_offset:])
+		copy(destination, data)
 		
 		return .None
 	}
 	
 	// Cross-segment
 	landing_and_data := 1 + words_needed
-	seg_id, offset, alloc_err := segment_manager_allocate(sb.manager, landing_and_data)
-	if alloc_err != .None {
-		return alloc_err
+	segment_id, offset, allocation_error := segment_manager_allocate(sb.manager, landing_and_data)
+	if allocation_error != .None {
+		return allocation_error
 	}
 	
-	target_seg := segment_manager_get_segment(sb.manager, seg_id)
+	target_segment := segment_manager_get_segment(sb.manager, segment_id)
 	
 	// Landing pad
 	landing_pad := list_pointer_encode(0, .Byte, length)
-	segment_set_word(target_seg, offset, landing_pad)
+	segment_set_word(target_segment, offset, landing_pad)
 	
 	// Copy data
-	dest := slice.to_bytes(target_seg.data[offset + 1:])
-	copy(dest, data)
+	destination := slice.to_bytes(target_segment.data[offset + 1:])
+	copy(destination, data)
 	
 	// Far pointer
-	far_ptr := far_pointer_encode(false, offset, seg_id)
-	struct_pointer_slot(sb, ptr_idx)^ = far_ptr
+	far_ptr := far_pointer_encode(false, offset, segment_id)
+	struct_pointer_slot(sb, pointer_index)^ = far_ptr
 	
 	return .None
 }
@@ -636,14 +636,14 @@ struct_builder_set_data :: proc(
 
 // List_Builder is used to construct a list within a message
 List_Builder :: struct {
-	segment:      ^Segment,
-	data_offset:  u32, // word offset where list content starts
-	count:        u32, // number of elements
-	element_size: Element_Size, // element size code
+	segment:       ^Segment,
+	data_offset:   u32, // word offset where list content starts
+	count:         u32, // number of elements
+	element_size:  Element_Size, // element size code
 	// For composite lists:
-	data_words:   u16, // data words per struct element
-	ptr_count:    u16, // pointer count per struct element
-	manager:      ^Segment_Manager,
+	data_words:    u16, // data words per struct element
+	pointer_count: u16, // pointer count per struct element
+	manager:       ^Segment_Manager,
 }
 
 // Get byte pointer to list content
@@ -779,14 +779,14 @@ list_builder_get_struct :: proc(lb: ^List_Builder, index: u32) -> (sb: Struct_Bu
 		return {}, .Invalid_Element_Size
 	}
 	
-	words_per_element := u32(lb.data_words) + u32(lb.ptr_count)
+	words_per_element := u32(lb.data_words) + u32(lb.pointer_count)
 	element_offset := lb.data_offset + (index * words_per_element)
 	
 	return Struct_Builder{
 		segment       = lb.segment,
 		data_offset   = element_offset,
 		data_words    = lb.data_words,
-		pointer_count = lb.ptr_count,
+		pointer_count = lb.pointer_count,
 		manager       = lb.manager,
 	}, .None
 }

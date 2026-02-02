@@ -110,14 +110,14 @@ validate_struct_pointer :: proc(
 
 // Validated list pointer result
 Validated_List :: struct {
-	segment_id:       u32,
-	segment:          []Word,
-	data_offset:      u32,
-	element_size:     Element_Size,
-	element_count:    u32,
+	segment_id:           u32,
+	segment:              []Word,
+	data_offset:          u32,
+	element_size:         Element_Size,
+	element_count:        u32,
 	// For composite lists:
-	struct_data_size: u16,
-	struct_ptr_count: u16,
+	struct_data_size:     u16,
+	struct_pointer_count: u16,
 }
 
 // Decode composite list tag element count (unsigned 30 bits)
@@ -173,7 +173,7 @@ validate_list_pointer :: proc(
 	// Calculate list size in words
 	list_words: u32
 	struct_data_size: u16 = 0
-	struct_ptr_count: u16 = 0
+	struct_pointer_count: u16 = 0
 	element_count := parts.element_count
 	data_offset := target
 	
@@ -194,7 +194,7 @@ validate_list_pointer :: proc(
 		}
 		
 		struct_data_size = tag_parts.data_size
-		struct_ptr_count = tag_parts.pointer_count
+		struct_pointer_count = tag_parts.pointer_count
 		
 		// Decode element count as unsigned 30-bit value (not signed offset)
 		elem_count, elem_ok := composite_tag_element_count(tag)
@@ -205,7 +205,7 @@ validate_list_pointer :: proc(
 		data_offset = target + 1 // content starts after tag
 		
 		// Verify consistency
-		words_per_element := u32(struct_data_size) + u32(struct_ptr_count)
+		words_per_element := u32(struct_data_size) + u32(struct_pointer_count)
 		if words_per_element > 0 && element_count > list_words / words_per_element {
 			return {}, .Pointer_Out_Of_Bounds
 		}
@@ -225,7 +225,7 @@ validate_list_pointer :: proc(
 	// Check traversal limit
 	// Zero-sized elements count as 1 word each (amplification prevention)
 	traversal_words: u64
-	if parts.element_size == .Void || (parts.element_size == .Composite && struct_data_size == 0 && struct_ptr_count == 0) {
+	if parts.element_size == .Void || (parts.element_size == .Composite && struct_data_size == 0 && struct_pointer_count == 0) {
 		traversal_words = u64(element_count)
 	} else {
 		traversal_words = u64(max(list_words, 1))
@@ -236,13 +236,13 @@ validate_list_pointer :: proc(
 	}
 	
 	return Validated_List{
-		segment_id       = segment_id,
-		segment          = segment,
-		data_offset      = data_offset,
-		element_size     = parts.element_size,
-		element_count    = element_count,
-		struct_data_size = struct_data_size,
-		struct_ptr_count = struct_ptr_count,
+		segment_id           = segment_id,
+		segment              = segment,
+		data_offset          = data_offset,
+		element_size         = parts.element_size,
+		element_count        = element_count,
+		struct_data_size     = struct_data_size,
+		struct_pointer_count = struct_pointer_count,
 	}, .None
 }
 
@@ -372,7 +372,7 @@ follow_far_pointer_to_list :: proc(
 		
 		// Calculate list size
 		struct_data_size: u16 = 0
-		struct_ptr_count: u16 = 0
+		struct_pointer_count: u16 = 0
 		element_count := tag_parts.element_count
 		data_offset := content_far_parts.offset
 		list_words: u32
@@ -392,7 +392,7 @@ follow_far_pointer_to_list :: proc(
 			}
 			
 			struct_data_size = composite_parts.data_size
-			struct_ptr_count = composite_parts.pointer_count
+			struct_pointer_count = composite_parts.pointer_count
 			
 			// Decode element count as unsigned 30-bit value
 			elem_count, elem_ok := composite_tag_element_count(composite_tag)
@@ -418,7 +418,7 @@ follow_far_pointer_to_list :: proc(
 		
 		// Check traversal limit
 		traversal_words: u64
-		if tag_parts.element_size == .Void || (tag_parts.element_size == .Composite && struct_data_size == 0 && struct_ptr_count == 0) {
+		if tag_parts.element_size == .Void || (tag_parts.element_size == .Composite && struct_data_size == 0 && struct_pointer_count == 0) {
 			traversal_words = u64(element_count)
 		} else {
 			traversal_words = u64(max(list_words, 1))
@@ -429,13 +429,13 @@ follow_far_pointer_to_list :: proc(
 		}
 		
 		return Validated_List{
-			segment_id       = content_far_parts.segment_id,
-			segment          = content_segment,
-			data_offset      = data_offset,
-			element_size     = tag_parts.element_size,
-			element_count    = element_count,
-			struct_data_size = struct_data_size,
-			struct_ptr_count = struct_ptr_count,
+			segment_id           = content_far_parts.segment_id,
+			segment              = content_segment,
+			data_offset          = data_offset,
+			element_size         = tag_parts.element_size,
+			element_count        = element_count,
+			struct_data_size     = struct_data_size,
+			struct_pointer_count = struct_pointer_count,
 		}, .None
 	} else {
 		// Single-far pointer: landing pad contains the actual list pointer
