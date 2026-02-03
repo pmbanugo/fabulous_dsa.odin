@@ -1,4 +1,5 @@
 # fabulous_dsa.odin
+
 An adventure and experiment on Data Structure and Algorithms, implemented in Odin
 
 > Zig alternative available at https://github.com/pmbanugo/dsa_dump.zig, although they're not meant to map 1:1 on what they implement, and how they do it.
@@ -10,7 +11,7 @@ An adventure and experiment on Data Structure and Algorithms, implemented in Odi
 
 ## Serialization Formats
 
-- [Cap'n Proto](capnp/) - Insanely fast data interchange format (WIP)
+- [Cap'n Proto](capnp/) - Insanely fast data interchange format (WIP). Infinitely faster cerealisation protocol
   - [Design Document](capnp/DESIGN.md) - Architecture and specification
   - [Implementation Roadmap](capnp/IMPLEMENTATION.md) - Phase-by-phase task tracking
 
@@ -33,7 +34,7 @@ Run tests for each package:
 ```sh
 odin test binary_fuse_filters/
 odin test hash_tables/
-odin test capnp/
+odin test capnp/tests/
 ```
 
 Or run tests from within a package directory:
