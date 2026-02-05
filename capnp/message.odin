@@ -40,18 +40,12 @@ serialize_frame_header :: proc(
 
 	// Write segment count - 1 (little-endian u32)
 	count_minus_one := segment_count - 1
-	buffer[0] = byte(count_minus_one)
-	buffer[1] = byte(count_minus_one >> 8)
-	buffer[2] = byte(count_minus_one >> 16)
-	buffer[3] = byte(count_minus_one >> 24)
+	(cast(^u32le)&buffer[0])^ = u32le(count_minus_one)
 
 	// Write segment sizes (each as little-endian u32)
 	offset: u32 = 4
 	for size in segment_sizes {
-		buffer[offset + 0] = byte(size)
-		buffer[offset + 1] = byte(size >> 8)
-		buffer[offset + 2] = byte(size >> 16)
-		buffer[offset + 3] = byte(size >> 24)
+		(cast(^u32le)&buffer[offset])^ = u32le(size)
 		offset += 4
 	}
 
@@ -75,10 +69,7 @@ deserialize_frame_header :: proc(
 	}
 
 	// Read segment count - 1 (little-endian u32)
-	count_minus_one := u32(data[0]) |
-	                   (u32(data[1]) << 8) |
-	                   (u32(data[2]) << 16) |
-	                   (u32(data[3]) << 24)
+	count_minus_one := u32((cast(^u32le)&data[0])^)
 	
 	segment_count := count_minus_one + 1
 	
@@ -101,10 +92,7 @@ deserialize_frame_header :: proc(
 	// Read segment sizes
 	offset: u32 = 4
 	for i in 0 ..< segment_count {
-		sizes[i] = u32(data[offset + 0]) |
-		           (u32(data[offset + 1]) << 8) |
-		           (u32(data[offset + 2]) << 16) |
-		           (u32(data[offset + 3]) << 24)
+		sizes[i] = u32((cast(^u32le)&data[offset])^)
 		
 		// Sanity check segment size
 		if sizes[i] > 1 << 28 { // ~2GB per segment max

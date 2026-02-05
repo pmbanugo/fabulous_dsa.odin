@@ -133,10 +133,7 @@ deserialize_from_reader :: proc(
 	}
 
 	// Parse segment count
-	count_minus_one := u32(header_start[0]) |
-	                   (u32(header_start[1]) << 8) |
-	                   (u32(header_start[2]) << 16) |
-	                   (u32(header_start[3]) << 24)
+	count_minus_one := u32((cast(^u32le)&header_start[0])^)
 	segment_count := count_minus_one + 1
 
 	if segment_count > 512 {
@@ -172,10 +169,7 @@ deserialize_from_reader :: proc(
 	byte_offset: u32 = 4
 	total_words: u32 = 0
 	for i in 0 ..< segment_count {
-		segment_sizes[i] = u32(header_buffer[byte_offset + 0]) |
-		                   (u32(header_buffer[byte_offset + 1]) << 8) |
-		                   (u32(header_buffer[byte_offset + 2]) << 16) |
-		                   (u32(header_buffer[byte_offset + 3]) << 24)
+		segment_sizes[i] = u32((cast(^u32le)&header_buffer[byte_offset])^)
 
 		if segment_sizes[i] > 1 << 28 {
 			return {}, nil, .Segment_Size_Overflow
