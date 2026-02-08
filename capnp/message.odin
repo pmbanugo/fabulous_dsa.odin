@@ -1,6 +1,5 @@
 package capnp
 
-import "core:encoding/endian"
 import "core:slice"
 
 // Frame header for serialized messages
@@ -41,12 +40,12 @@ serialize_frame_header :: proc(
 
 	// Write segment count - 1 (little-endian u32)
 	count_minus_one := segment_count - 1
-	endian.unchecked_put_u32le(buffer[0:], count_minus_one)
+	(cast(^u32le)&buffer[0])^ = u32le(count_minus_one)
 
 	// Write segment sizes (each as little-endian u32)
 	offset: u32 = 4
 	for size in segment_sizes {
-		endian.unchecked_put_u32le(buffer[offset:], size)
+		(cast(^u32le)&buffer[offset])^ = u32le(size)
 		offset += 4
 	}
 
@@ -70,7 +69,7 @@ deserialize_frame_header :: proc(
 	}
 
 	// Read segment count - 1 (little-endian u32)
-	count_minus_one := endian.unchecked_get_u32le(data[0:])
+	count_minus_one := u32((cast(^u32le)&data[0])^)
 	
 	segment_count := count_minus_one + 1
 	
@@ -93,7 +92,7 @@ deserialize_frame_header :: proc(
 	// Read segment sizes
 	offset: u32 = 4
 	for i in 0 ..< segment_count {
-		sizes[i] = endian.unchecked_get_u32le(data[offset:])
+		sizes[i] = u32((cast(^u32le)&data[offset])^)
 		
 		// Sanity check segment size
 		if sizes[i] > 1 << 28 { // ~2GB per segment max
