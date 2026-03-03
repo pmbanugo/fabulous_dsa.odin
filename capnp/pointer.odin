@@ -128,44 +128,38 @@ far_pointer_decode :: proc(raw: u64) -> (parts: Far_Pointer_Parts, ok: bool) {
 	}, true
 }
 
-// Return the number of bits per element for each Element_Size
-// Returns 0 for Void, and a special value for Composite (handled separately)
-element_size_bits :: proc(size: Element_Size) -> u32 {
-	switch size {
-	case .Void:
-		return 0
-	case .Bit:
-		return 1
-	case .Byte:
-		return 8
-	case .Two_Bytes:
-		return 16
-	case .Four_Bytes:
-		return 32
-	case .Eight_Bytes, .Pointer:
-		return 64
-	case .Composite:
-		return 0 // Composite lists have variable element size
-	}
-	return 0
+// Bits per element for each Element_Size (compile-time lookup table)
+// Returns 0 for Void and Composite (variable element size)
+ELEMENT_SIZE_BITS_TABLE :: [Element_Size]u32{
+	.Void       = 0,
+	.Bit        = 1,
+	.Byte       = 8,
+	.Two_Bytes  = 16,
+	.Four_Bytes = 32,
+	.Eight_Bytes = 64,
+	.Pointer    = 64,
+	.Composite  = 0,
 }
 
-// Return the number of bytes per element for each Element_Size
-// For sub-byte sizes (Void, Bit), returns 0
-element_size_bytes :: proc(size: Element_Size) -> u32 {
-	switch size {
-	case .Void, .Bit:
-		return 0
-	case .Byte:
-		return 1
-	case .Two_Bytes:
-		return 2
-	case .Four_Bytes:
-		return 4
-	case .Eight_Bytes, .Pointer:
-		return 8
-	case .Composite:
-		return 0 // Composite lists have variable element size
-	}
-	return 0
+element_size_bits :: #force_inline proc(size: Element_Size) -> u32 {
+	table := ELEMENT_SIZE_BITS_TABLE
+	return table[size]
+}
+
+// Bytes per element for each Element_Size (compile-time lookup table)
+// Returns 0 for sub-byte sizes (Void, Bit) and Composite
+ELEMENT_SIZE_BYTES_TABLE :: [Element_Size]u32{
+	.Void       = 0,
+	.Bit        = 0,
+	.Byte       = 1,
+	.Two_Bytes  = 2,
+	.Four_Bytes = 4,
+	.Eight_Bytes = 8,
+	.Pointer    = 8,
+	.Composite  = 0,
+}
+
+element_size_bytes :: #force_inline proc(size: Element_Size) -> u32 {
+	table := ELEMENT_SIZE_BYTES_TABLE
+	return table[size]
 }

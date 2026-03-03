@@ -22,9 +22,11 @@ serialize_to_writer :: proc(message_builder: ^Message_Builder, writer: io.Writer
 	// Build frame header
 	header_size := frame_header_size(segment_count)
 	header_buffer := make([]byte, header_size, context.temp_allocator)
+	defer delete(header_buffer, context.temp_allocator)
 
 	// Collect segment sizes
 	segment_sizes := make([]u32, segment_count, context.temp_allocator)
+	defer delete(segment_sizes, context.temp_allocator)
 	for i in 0 ..< segment_count {
 		segment := segment_manager_get_segment(&message_builder.segments, i)
 		segment_sizes[i] = segment.used
@@ -37,8 +39,7 @@ serialize_to_writer :: proc(message_builder: ^Message_Builder, writer: io.Writer
 	}
 
 	// Write header
-	header_bytes_written, write_error := io.write(writer, header_buffer)
-	if write_error != nil || header_bytes_written != len(header_buffer) {
+	if !write_all_bytes(writer, header_buffer) {
 		return .Unexpected_End_Of_Input
 	}
 
@@ -48,8 +49,7 @@ serialize_to_writer :: proc(message_builder: ^Message_Builder, writer: io.Writer
 		segment_data := segment_get_data(segment)
 		segment_bytes := slice.to_bytes(segment_data)
 
-		bytes_written, segment_write_error := io.write(writer, segment_bytes)
-		if segment_write_error != nil || bytes_written != len(segment_bytes) {
+		if !write_all_bytes(writer, segment_bytes) {
 			return .Unexpected_End_Of_Input
 		}
 	}
@@ -127,7 +127,7 @@ deserialize_from_reader :: proc(
 	// First, read the frame header to determine message size
 	// Read first 4 bytes to get segment count
 	header_start: [4]byte
-	bytes_read, read_error := io.read(input_reader, header_start[:])
+	bytes_read, read_error := io.read_full(input_reader, header_start[:])
 	if read_error != nil || bytes_read != 4 {
 		return {}, nil, .Unexpected_End_Of_Input
 	}
@@ -151,13 +151,14 @@ deserialize_from_reader :: proc(
 	if allocation_error != nil {
 		return {}, nil, .Out_Of_Memory
 	}
+	defer delete(header_buffer, context.temp_allocator)
 
 	copy(header_buffer[:4], header_start[:])
 
 	// Read rest of header
 	if header_size > 4 {
 		remaining_header := header_buffer[4:]
-		bytes_read, read_error = io.read(input_reader, remaining_header)
+		bytes_read, read_error = io.read_full(input_reader, remaining_header)
 		if read_error != nil || bytes_read != int(header_size - 4) {
 			return {}, nil, .Unexpected_End_Of_Input
 		}
@@ -168,6 +169,7 @@ deserialize_from_reader :: proc(
 	if sizes_allocation_error != nil {
 		return {}, nil, .Out_Of_Memory
 	}
+	defer delete(segment_sizes, context.temp_allocator)
 
 	byte_offset: u32 = 4
 	total_words: u32 = 0

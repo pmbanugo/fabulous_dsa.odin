@@ -4,11 +4,13 @@ A pure Odin implementation of the [Cap'n Proto](https://capnproto.org/) serializ
 
 ## Features
 
-- **Zero-copy deserialization** - Read data directly from byte buffers
-- **Builder API** - Construct messages with structs, lists, text, and data blobs
-- **Reader API** - Traverse messages with pointer validation and security limits
-- **Packing compression** - Reduce message size for transmission
-- **Security hardened** - Traversal limits, nesting limits, bounds checking
+- **Zero-copy deserialization** — Read data directly from byte buffers
+- **Builder API** — Construct messages with structs, lists, text, and data blobs
+- **Reader API** — Traverse messages with pointer validation and security limits
+- **Packing compression** — Reduce message size for transmission
+- **Security hardened** — Traversal limits, nesting limits, bounds checking
+- **SIMD optimized** — Vectorized tag computation, hardware popcount, bulk memory ops
+- **Segment pooling** — Reuse allocations for high-throughput message building
 
 ## Usage
 
@@ -37,12 +39,55 @@ value := capnp.struct_reader_get_u32(&sr, 0)
 text, _ := capnp.struct_reader_get_text(&sr, 0)
 ```
 
+## Packed Serialization
+
+For bandwidth-sensitive use cases, pack messages before sending:
+
+```odin
+// Serialize + pack in one step
+packed, _ := capnp.serialize_packed(&mb)
+defer delete(packed)
+
+// Unpack + deserialize
+reader, unpacked_data, _ := capnp.deserialize_packed(packed)
+defer delete(unpacked_data)
+defer capnp.message_reader_destroy(&reader)
+```
+
+## Segment Pooling
+
+For high-throughput scenarios (e.g., building many messages in a loop), use segment pooling to reuse allocations:
+
+```odin
+// Initialize a pool once
+pool: capnp.Segment_Pool
+capnp.segment_pool_init(&pool)
+defer capnp.segment_pool_destroy(&pool)
+
+for request in requests {
+    pmb: capnp.Pooled_Message_Builder
+    capnp.pooled_message_builder_init(&pmb, &pool)
+    
+    // Use the same builder API as Message_Builder
+    root, _ := capnp.pooled_message_builder_init_root(&pmb, 2, 1)
+    capnp.struct_builder_set_u32(&root, 0, 42)
+    capnp.struct_builder_set_text(&root, 0, "Hello")
+    
+    // Serialize via segment manager
+    data, _ := capnp.serialize_segments(&pmb.segments)
+    defer delete(data)
+    
+    // Segments returned to pool instead of freed
+    capnp.pooled_message_builder_destroy(&pmb)
+}
+```
+
 ## Running Tests
 
 Run all tests:
 
 ```sh
-# Full test suite (164 tests)
+# Full test suite (175 tests)
 odin test capnp/tests/
 
 # With memory leak detection
@@ -51,6 +96,26 @@ odin test capnp/tests/ -debug
 # Run a specific test
 odin test capnp/tests/ -define:ODIN_TEST_NAMES=capnp_tests.test_security_list_pointer_out_of_bounds
 ```
+
+## Benchmarks
+
+Run the benchmark suite:
+
+```sh
+odin run capnp/benchmark_runner/ -o:speed
+```
+
+Sample output (Apple M-series):
+
+| Operation | Performance |
+|-----------|-------------|
+| Pack (1024 zero-heavy words) | ~791K ops/sec, 6.2 MB/s |
+| Unpack (1024 dense words) | ~1.97M ops/sec, 15.5 MB/s |
+| Build simple struct | ~8.8M ops/sec |
+| Serialize | ~29M ops/sec |
+| Deserialize | ~37M ops/sec |
+| SIMD tag computation | ~1.3B words/sec |
+| SIMD zero check | ~2.3B words/sec |
 
 ## Interoperability Testing
 
@@ -106,6 +171,9 @@ The output bytes are embedded directly in `tests/interop_tests.odin`.
 | `validation.odin` | Pointer validation, security limits |
 | `serialize.odin` | Serialize/deserialize functions |
 | `pack.odin` | Packing compression |
+| `simd.odin` | SIMD tag computation, zero check (internal ctz bit iteration) |
+| `pool.odin` | Segment pooling, pooled message builder |
+| `benchmark.odin` | Performance benchmark suite |
 
 ## Test Suite
 
@@ -120,6 +188,7 @@ The output bytes are embedded directly in `tests/interop_tests.odin`.
 | `tests/security_tests.odin` | 16 | Security limit enforcement |
 | `tests/pack_tests.odin` | 26 | Packing compression |
 | `tests/interop_tests.odin` | 17 | Reference implementation compatibility |
+| `tests/optimization_tests.odin` | 11 | SIMD, pooling optimizations |
 
 ## Documentation
 

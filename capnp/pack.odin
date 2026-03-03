@@ -1,5 +1,6 @@
 package capnp
 
+import "base:intrinsics"
 import "core:io"
 import "core:mem"
 
@@ -101,15 +102,16 @@ pack :: proc(data: []byte, allocator := context.allocator) -> (packed: []byte, e
 			}
 			output[literal_count_position] = literal_word_count
 		} else {
-			// Mixed word - write tag and non-zero bytes
+			// Mixed word - write tag and non-zero bytes using ctz bit iteration
 			output[output_position] = tag
 			output_position += 1
 
-			for i in 0 ..< WORD_SIZE_BYTES {
-				if (tag & (1 << uint(i))) != 0 {
-					output[output_position] = word[i]
-					output_position += 1
-				}
+			remaining := tag
+			for remaining != 0 {
+				i := intrinsics.count_trailing_zeros(remaining)
+				output[output_position] = word[i]
+				output_position += 1
+				remaining &= remaining - 1
 			}
 			input_position += WORD_SIZE_BYTES
 		}
@@ -205,16 +207,17 @@ pack_to_writer :: proc(data: []byte, writer: io.Writer) -> Error {
 				}
 			}
 		} else {
-			// Mixed word - write tag and non-zero bytes
+			// Mixed word - write tag and non-zero bytes using ctz bit iteration
 			write_buffer: [9]byte
 			write_buffer[0] = tag
 			buffer_length := 1
 
-			for i in 0 ..< WORD_SIZE_BYTES {
-				if (tag & (1 << uint(i))) != 0 {
-					write_buffer[buffer_length] = word[i]
-					buffer_length += 1
-				}
+			remaining := tag
+			for remaining != 0 {
+				i := intrinsics.count_trailing_zeros(remaining)
+				write_buffer[buffer_length] = word[i]
+				buffer_length += 1
+				remaining &= remaining - 1
 			}
 			input_position += WORD_SIZE_BYTES
 
@@ -239,11 +242,12 @@ pack_word :: proc(word: []byte) -> (result: [9]byte, length: int) {
 	result[0] = tag
 	length = 1
 
-	for i in 0 ..< WORD_SIZE_BYTES {
-		if (tag & (1 << uint(i))) != 0 {
-			result[length] = word[i]
-			length += 1
-		}
+	remaining := tag
+	for remaining != 0 {
+		i := intrinsics.count_trailing_zeros(remaining)
+		result[length] = word[i]
+		length += 1
+		remaining &= remaining - 1
 	}
 
 	return result, length
@@ -393,13 +397,13 @@ unpack :: proc(
 				return nil, err
 			}
 
-			// Reconstruct word (output already zero-initialized)
-			for i in 0 ..< WORD_SIZE_BYTES {
-				if (tag & (1 << uint(i))) != 0 {
-					output[output_position + i] = packed[input_position]
-					input_position += 1
-				}
-				// Zero bytes are already 0 from allocation
+			// Reconstruct word using ctz bit iteration (output already zero-initialized)
+			remaining := tag
+			for remaining != 0 {
+				i := int(intrinsics.count_trailing_zeros(remaining))
+				output[output_position + i] = packed[input_position]
+				input_position += 1
+				remaining &= remaining - 1
 			}
 			output_position += WORD_SIZE_BYTES
 		}
@@ -482,12 +486,13 @@ unpack_word :: proc(packed_bytes: []byte) -> (word: [WORD_SIZE_BYTES]byte, consu
 		return {}, 0, .Invalid_Packed_Data
 	}
 
-	// Reconstruct word (word is zero-initialized by default)
-	for i in 0 ..< WORD_SIZE_BYTES {
-		if (tag & (1 << uint(i))) != 0 {
-			word[i] = packed_bytes[consumed]
-			consumed += 1
-		}
+	// Reconstruct word using ctz bit iteration (word is zero-initialized by default)
+	remaining := tag
+	for remaining != 0 {
+		i := intrinsics.count_trailing_zeros(remaining)
+		word[i] = packed_bytes[consumed]
+		consumed += 1
+		remaining &= remaining - 1
 	}
 
 	return word, consumed, .None
@@ -495,8 +500,13 @@ unpack_word :: proc(packed_bytes: []byte) -> (word: [WORD_SIZE_BYTES]byte, consu
 
 // Helper: compute tag byte for a word
 // Bit N is set if byte N is non-zero
+// Uses SIMD-optimized path when input is exactly 8 bytes
 @(private)
 compute_tag :: proc(word: []byte) -> u8 {
+	if len(word) == WORD_SIZE_BYTES {
+		word_array := (cast(^[8]u8)raw_data(word))
+		return compute_tag_simd(word_array)
+	}
 	tag: u8 = 0
 	for i in 0 ..< min(8, len(word)) {
 		if word[i] != 0 {
@@ -506,21 +516,18 @@ compute_tag :: proc(word: []byte) -> u8 {
 	return tag
 }
 
-// Helper: count set bits in a byte
+// Count set bits in a byte using hardware popcount intrinsic
 @(private)
-count_bits :: proc(value: u8) -> int {
-	count := 0
-	remaining := value
-	for remaining != 0 {
-		count += 1
-		remaining &= remaining - 1 // Clear lowest set bit
-	}
-	return count
+count_bits :: #force_inline proc(value: u8) -> int {
+	return int(intrinsics.count_ones(value))
 }
 
-// Helper: check if a word is all zeros
+// Helper: check if a word is all zeros (uses u64 comparison)
 @(private)
 is_zero_word :: proc(word: []byte) -> bool {
+	if len(word) == WORD_SIZE_BYTES {
+		return is_zero_word_simd(cast(^u64)raw_data(word))
+	}
 	for byte_value in word {
 		if byte_value != 0 {
 			return false

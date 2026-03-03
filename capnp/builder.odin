@@ -48,17 +48,27 @@ message_builder_init_root :: proc(
 	data_words: u16,
 	pointer_count: u16,
 ) -> (sb: Struct_Builder, err: Error) {
+	return init_root_on_manager(&mb.segments, data_words, pointer_count)
+}
+
+// Shared helper: initialize a root struct on any Segment_Manager
+@(private)
+init_root_on_manager :: proc(
+	manager: ^Segment_Manager,
+	data_words: u16,
+	pointer_count: u16,
+) -> (sb: Struct_Builder, err: Error) {
 	struct_words := u32(data_words) + u32(pointer_count)
 	
 	// Special case: zero-sized struct uses offset = -1 per spec
 	if struct_words == 0 {
 		// Allocate only the root pointer word
-		seg_id, offset, alloc_err := segment_manager_allocate(&mb.segments, 1)
+		seg_id, offset, alloc_err := segment_manager_allocate(manager, 1)
 		if alloc_err != .None {
 			return {}, alloc_err
 		}
 		
-		seg := segment_manager_get_segment(&mb.segments, seg_id)
+		seg := segment_manager_get_segment(manager, seg_id)
 		root_ptr := struct_pointer_encode(-1, 0, 0)
 		segment_set_word(seg, offset, root_ptr)
 		
@@ -67,19 +77,19 @@ message_builder_init_root :: proc(
 			data_offset   = offset, // Won't be dereferenced (bounds checks will fail)
 			data_words    = 0,
 			pointer_count = 0,
-			manager       = &mb.segments,
+			manager       = manager,
 		}, .None
 	}
 	
 	// Allocate space for the root pointer + struct content
 	total_words := 1 + struct_words // 1 word for root pointer
 	
-	seg_id, offset, alloc_err := segment_manager_allocate(&mb.segments, total_words)
+	seg_id, offset, alloc_err := segment_manager_allocate(manager, total_words)
 	if alloc_err != .None {
 		return {}, alloc_err
 	}
 	
-	seg := segment_manager_get_segment(&mb.segments, seg_id)
+	seg := segment_manager_get_segment(manager, seg_id)
 	
 	// The root pointer is at offset, struct content starts at offset+1
 	// Pointer offset = target - (pointer_location + 1) = (offset+1) - (offset+1) = 0
@@ -92,7 +102,7 @@ message_builder_init_root :: proc(
 		data_offset   = offset + 1,
 		data_words    = data_words,
 		pointer_count = pointer_count,
-		manager       = &mb.segments,
+		manager       = manager,
 	}, .None
 }
 
